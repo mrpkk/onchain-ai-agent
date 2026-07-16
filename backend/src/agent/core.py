@@ -1,0 +1,384 @@
+"""
+Agent Core — the main autonomous agent that orchestrates perception, reasoning, planning, and execution.
+"""
+
+import asyncio
+import json
+import logging
+import os
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+
+from .perception import BlockchainPerception, PriceOracle
+from .reasoning import LLMReasoner, RiskAssessor, AgentDecision
+from .planning import AgentPlanner, Plan, PlanStatus, StepType
+from .execution import (
+    WalletManager, TransactionExecutor, SpendingLimit,
+    TransactionResult, TxStatus,
+)
+
+logger = logging.getLogger("agent.core")
+
+AGENT_STATE_DIR = Path(os.getenv("AGENT_STATE_DIR", "~/.onchain-agent/state")).expanduser()
+
+
+@dataclass
+class AgentConfig:
+    name: str
+    chain: str = "ethereum"
+    private_key: str = ""
+    daily_limit: float = 5.0
+    per_tx_limit: float = 1.0
+    auto_execute: bool = False
+    simulation_mode: bool = True
+    ai_model: str = "mistral-small-latest"
+    ai_api_key: str = ""
+    ai_base_url: str = "https://api.mistral.ai/v1"
+    polling_interval: int = 60
+    kill_switch: bool = False
+
+
+@dataclass
+class AgentState:
+    agent_id: str
+    config: AgentConfig
+    status: str = "idle"
+    current_plan: Optional[Plan] = None
+    balance: float = 0.0
+    daily_spend: float = 0.0
+    total_transactions: int = 0
+    successful_transactions: int = 0
+    failed_transactions: int = 0
+    last_action: Optional[str] = None
+    last_action_time: Optional[datetime] = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    def to_dict(self) -> dict:
+        return {
+            "agent_id": self.agent_id,
+            "name": self.config.name,
+            "status": self.status,
+            "chain": self.config.chain,
+            "balance": self.balance,
+            "daily_spend": self.daily_spend,
+            "daily_limit": self.config.daily_limit,
+            "total_transactions": self.total_transactions,
+            "successful_transactions": self.successful_transactions,
+            "failed_transactions": self.failed_transactions,
+            "last_action": self.last_action,
+            "last_action_time": self.last_action_time.isoformat() if self.last_action_time else None,
+            "kill_switch": self.config.kill_switch,
+            "simulation_mode": self.config.simulation_mode,
+            "plan_progress": self.current_plan.progress if self.current_plan else 0,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+class OnChainAgent:
+    """Autonomous AI agent that operates on EVM blockchains."""
+
+    def __init__(self, config: AgentConfig):
+        self.config = config
+        self.agent_id = f"agent_{config.name.lower().replace(' ', '_')}"
+
+        self.perception = BlockchainPerception([config.chain])
+        self.reasoner = LLMReasoner(
+            api_key=config.ai_api_key,
+            model=config.ai_model,
+            base_url=config.ai_base_url,
+        )
+        self.planner = AgentPlanner()
+        self.risk_assessor = RiskAssessor()
+
+        self.wallet: Optional[WalletManager] = None
+        self.executor: Optional[TransactionExecutor] = None
+
+        if config.private_key:
+            self.wallet = WalletManager(config.private_key, config.chain)
+            w3 = self.perception.get_web3(config.chain)
+            if w3:
+                self.executor = TransactionExecutor(
+                    wallet=self.wallet,
+                    w3=w3,
+                    spending_limit=SpendingLimit(
+                        daily_limit=config.daily_limit,
+                        per_tx_limit=config.per_tx_limit,
+                    ),
+                )
+
+        self.state = AgentState(
+            agent_id=self.agent_id,
+            config=config,
+        )
+
+        self._running = False
+        self._audit_log: list[dict] = []
+
+        AGENT_STATE_DIR.mkdir(parents=True, exist_ok=True)
+
+    async def start(self):
+        self._running = True
+        self.state.status = "running"
+        self._log_audit("agent_started", {"config": self.config.name})
+        logger.info(f"Agent '{self.config.name}' started on {self.config.chain}")
+
+        if self.wallet:
+            w3 = self.perception.get_web3(self.config.chain)
+            if w3:
+                self.state.balance = self.wallet.get_token_balance(w3, "0x0000000000000000000000000000000000000000")
+                if self.state.balance == 0:
+                    self.state.balance = float(Web3.from_wei(w3.eth.get_balance(self.wallet.address), "ether"))
+
+        while self._running:
+            if self.config.kill_switch:
+                logger.warning("Kill switch activated — stopping agent")
+                self.state.status = "stopped"
+                break
+
+            try:
+                await self._tick()
+            except Exception as e:
+                logger.error(f"Agent tick error: {e}")
+                self.state.status = "error"
+                self._log_audit("tick_error", {"error": str(e)})
+
+            await asyncio.sleep(self.config.polling_interval)
+
+    async def stop(self):
+        self._running = False
+        self.state.status = "stopped"
+        self._log_audit("agent_stopped", {})
+        logger.info(f"Agent '{self.config.name}' stopped")
+
+    async def _tick(self):
+        self.state.status = "thinking"
+
+        if self.current_plan and not self.current_plan.is_done:
+            await self._execute_plan_step()
+            return
+
+        if self.state.last_action_time:
+            elapsed = (datetime.now(timezone.utc) - self.state.last_action_time).seconds
+            if elapsed < self.config.polling_interval:
+                return
+
+        state_data = await self._gather_state()
+        decision = await self.reasoner.decide(
+            state=state_data,
+            goal="Monitor the blockchain and take profitable actions within spending limits.",
+            history=self._get_recent_actions(),
+        )
+
+        decision = self.risk_assessor.assess(
+            decision,
+            self.state.balance,
+            self.state.daily_spend,
+        )
+
+        self._log_audit("decision_made", {
+            "action": decision.action,
+            "confidence": decision.confidence,
+            "risk_level": decision.risk_level,
+            "reasoning": decision.reasoning[:200],
+        })
+
+        if decision.action == "ask_human":
+            self.state.status = "awaiting_approval"
+            self._log_audit("awaiting_approval", decision.params)
+            return
+
+        if decision.requires_approval and not self.config.auto_execute:
+            self.state.status = "awaiting_approval"
+            self._log_audit("requires_approval", {
+                "action": decision.action,
+                "params": decision.params,
+            })
+            return
+
+        if self.config.simulation_mode:
+            logger.info(f"SIMULATION: Would execute {decision.action} with params {decision.params}")
+            self.state.last_action = f"sim:{decision.action}"
+            self.state.last_action_time = datetime.now(timezone.utc)
+            return
+
+        result = await self._execute_decision(decision)
+        self._update_state_from_result(result)
+
+    async def execute_goal(self, goal: str, chain: str = None) -> Plan:
+        chain = chain or self.config.chain
+        plan = self.planner.create_plan(goal, {"chain": chain})
+        self.state.current_plan = plan
+        self.state.status = "executing_plan"
+        self._log_audit("plan_created", {"goal": goal, "plan_id": plan.id, "steps": len(plan.steps)})
+        return plan
+
+    async def _execute_plan_step(self):
+        plan = self.state.current_plan
+        if not plan:
+            return
+
+        step = plan.get_next_step()
+        if not step:
+            if plan.is_done:
+                plan.status = PlanStatus.COMPLETED
+                self.state.status = "idle"
+                self._log_audit("plan_completed", {"plan_id": plan.id})
+            return
+
+        step.status = PlanStatus.IN_PROGRESS
+        logger.info(f"Executing step: {step.description}")
+
+        try:
+            if step.step_type == StepType.READ_STATE:
+                state = await self._gather_state()
+                step.result = state
+                step.status = PlanStatus.COMPLETED
+
+            elif step.step_type == StepType.TRANSFER:
+                result = self.executor.send_eth(
+                    to_address=step.params.get("to", ""),
+                    amount_eth=step.params.get("amount", 0),
+                    chain=step.chain,
+                )
+                step.result = result.to_dict()
+                step.status = PlanStatus.COMPLETED if result.status == TxStatus.CONFIRMED else PlanStatus.FAILED
+
+            elif step.step_type == StepType.CONTRACT_CALL:
+                result = self.executor.call_contract(
+                    contract_address=step.params.get("address", ""),
+                    abi=step.params.get("abi", []),
+                    function_name=step.params.get("function", ""),
+                    args=step.params.get("args", []),
+                    value_eth=step.params.get("value", 0),
+                    chain=step.chain,
+                )
+                step.result = result.to_dict()
+                step.status = PlanStatus.COMPLETED if result.status == TxStatus.CONFIRMED else PlanStatus.FAILED
+
+            elif step.step_type == StepType.APPROVE:
+                result = self.executor.approve_token(
+                    token_address=step.params.get("token", ""),
+                    spender=step.params.get("spender", ""),
+                    chain=step.chain,
+                )
+                step.result = result.to_dict()
+                step.status = PlanStatus.COMPLETED if result.status == TxStatus.CONFIRMED else PlanStatus.FAILED
+
+            elif step.step_type == StepType.WAIT:
+                step.status = PlanStatus.COMPLETED
+
+            elif step.step_type == StepType.CONDITIONAL:
+                step.status = PlanStatus.COMPLETED
+
+            else:
+                step.status = PlanStatus.COMPLETED
+
+        except Exception as e:
+            step.error = str(e)
+            step.status = PlanStatus.FAILED
+            logger.error(f"Step failed: {e}")
+
+        self._log_audit("step_executed", {
+            "step_id": step.id,
+            "type": step.step_type.value,
+            "status": step.status.value,
+        })
+
+    async def _execute_decision(self, decision: AgentDecision) -> TransactionResult:
+        if decision.action == "transfer":
+            return self.executor.send_eth(
+                to_address=decision.params.get("to", ""),
+                amount_eth=decision.params.get("amount", 0),
+                chain=self.config.chain,
+            )
+        elif decision.action == "contract_call":
+            return self.executor.call_contract(
+                contract_address=decision.params.get("address", ""),
+                abi=decision.params.get("abi", []),
+                function_name=decision.params.get("function", ""),
+                args=decision.params.get("args", []),
+                value_eth=decision.params.get("value", 0),
+                chain=self.config.chain,
+            )
+        elif decision.action == "approve":
+            return self.executor.approve_token(
+                token_address=decision.params.get("token", ""),
+                spender=decision.params.get("spender", ""),
+                chain=self.config.chain,
+            )
+        elif decision.action == "hold":
+            self.state.last_action = "hold"
+            self.state.last_action_time = datetime.now(timezone.utc)
+            return TransactionResult(
+                tx_hash="hold", status=TxStatus.CONFIRMED, chain=self.config.chain,
+                from_address="", to_address="", value=0, gas_used=0, gas_price_gwei=0,
+            )
+        else:
+            return TransactionResult(
+                tx_hash="", status=TxStatus.FAILED, chain=self.config.chain,
+                from_address="", to_address="", value=0, gas_used=0, gas_price_gwei=0,
+                error=f"Unknown action: {decision.action}",
+            )
+
+    async def _gather_state(self) -> dict:
+        state = {
+            "agent": self.state.to_dict(),
+            "chain": self.config.chain,
+            "block_number": self.perception.get_block_number(self.config.chain),
+            "gas_price_gwei": self.perception.get_gas_price(self.config.chain),
+        }
+
+        oracle = PriceOracle()
+        prices = await oracle.get_price()
+        state["prices"] = {k: v.price_usd for k, v in prices.items()}
+
+        if self.wallet:
+            w3 = self.perception.get_web3(self.config.chain)
+            if w3:
+                state["wallet"] = {
+                    "address": self.wallet.address,
+                    "balance_eth": float(Web3.from_wei(
+                        w3.eth.get_balance(Web3.to_checksum_address(self.wallet.address)),
+                        "ether"
+                    )),
+                }
+
+        return state
+
+    def _update_state_from_result(self, result: TransactionResult):
+        self.state.total_transactions += 1
+        if result.status == TxStatus.CONFIRMED:
+            self.state.successful_transactions += 1
+        else:
+            self.state.failed_transactions += 1
+        self.state.last_action = f"{result.status.value}:{result.tx_hash[:10]}"
+        self.state.last_action_time = datetime.now(timezone.utc)
+        self.state.status = "running"
+
+    def _get_recent_actions(self) -> list[dict]:
+        return self._audit_log[-20:]
+
+    def _log_audit(self, event: str, data: dict):
+        entry = {
+            "event": event,
+            "data": data,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        self._audit_log.append(entry)
+        if len(self._audit_log) > 1000:
+            self._audit_log = self._audit_log[-500:]
+
+    def save_state(self):
+        state_file = AGENT_STATE_DIR / f"{self.agent_id}.json"
+        state_file.write_text(json.dumps(self.state.to_dict(), indent=2, default=str))
+
+    def load_state(self):
+        state_file = AGENT_STATE_DIR / f"{self.agent_id}.json"
+        if state_file.exists():
+            data = json.loads(state_file.read_text())
+            self.state.balance = data.get("balance", 0)
+            self.state.total_transactions = data.get("total_transactions", 0)
+            self.state.successful_transactions = data.get("successful_transactions", 0)
+            self.state.failed_transactions = data.get("failed_transactions", 0)
