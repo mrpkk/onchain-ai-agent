@@ -12,8 +12,13 @@ class Settings(BaseSettings):
 
     # Application
     app_name: str = "OnChain AI Agent"
-    app_version: str = "0.1.0"
+    app_version: str = "1.0.0"
     debug: bool = False
+
+    # API Keys
+    mistral_api_key: str = ""
+    github_token: str = ""
+    signer_private_key: str = ""
 
     # Server
     host: str = "0.0.0.0"

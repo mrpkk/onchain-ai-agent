@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Optional
 
 from web3 import Web3
-from web3.middleware import geth_poa_middleware
+# web3 v7 auto-detects PoA chains
 
 logger = logging.getLogger("agent.execution")
 

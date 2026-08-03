@@ -85,7 +85,7 @@ class AgentListResponse(BaseModel):
 
 class GoalRequest(BaseModel):
     goal: str = Field(..., min_length=1, max_length=2048)
-    context: dict = Field(default_factory=dict)
+    context: Optional[str] = None
 
 
 class KillSwitchRequest(BaseModel):

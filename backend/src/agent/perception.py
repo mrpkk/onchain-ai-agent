@@ -12,7 +12,6 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from web3 import Web3
-from web3.middleware import geth_poa_middleware
 
 logger = logging.getLogger("agent.perception")
 
@@ -94,10 +93,7 @@ class BlockchainPerception:
                 continue
             try:
                 w3 = Web3(Web3.HTTPProvider(config["rpc"]))
-                try:
-                    w3.middleware_onion.inject(geth_poa_middleware, layer=0)
-                except Exception:
-                    pass
+                # web3 v7 auto-detects PoA chains
                 if w3.is_connected():
                     self.connections[chain_name] = w3
                     logger.info(f"Connected to {chain_name} (block #{w3.eth.block_number})")
