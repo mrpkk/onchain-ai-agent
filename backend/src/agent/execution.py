@@ -87,14 +87,29 @@ class WalletManager:
     ]
 
     def __init__(self, private_key: str, chain: str = "ethereum"):
-        self.private_key = private_key
+        # RTM NFR-1: ключ не лежит в публичном атрибуте — только name-mangled,
+        # repr/логи выдают лишь хвост. Расшифровка из KeyVault — до вызова конструктора.
+        self._key_material = private_key
         self.chain = chain
         self.address = self._derive_address()
         self._nonces: dict[str, int] = {}
 
+    @property
+    def private_key(self) -> str:
+        """Защита от случайной сериализации: чтение ключа запрещено."""
+        raise AttributeError(
+            "Приватный ключ не читается напрямую. Используйте sign_transaction()."
+        )
+
+    def __repr__(self) -> str:
+        # безопасно даже для недоинициализированного объекта (pytest/dump-сценарии)
+        from src.security.keyvault import KeyVault
+        addr = getattr(self, "address", "<unset>")
+        return f"<WalletManager {addr} key={KeyVault.redact(getattr(self, '_key_material', ''))}>"
+
     def _derive_address(self) -> str:
         from eth_account import Account
-        account = Account.from_key(self.private_key)
+        account = Account.from_key(self._key_material)
         return account.address
 
     def get_nonce(self, w3: Web3) -> int:
@@ -127,7 +142,7 @@ class WalletManager:
         return allowance / (10 ** decimals)
 
     def sign_transaction(self, w3: Web3, tx: dict) -> str:
-        signed = w3.eth.account.sign_transaction(tx, self.private_key)
+        signed = w3.eth.account.sign_transaction(tx, self._key_material)
         return signed.raw_transaction
 
 

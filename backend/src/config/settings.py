@@ -52,3 +52,17 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def validate_security(settings_obj) -> list[str]:
+    """RTM NFR-1: проверки безопасности при старте. Возвращает список ошибок."""
+    errors: list[str] = []
+    jwt_default = "CHANGE-ME-in-production-use-openssl-rand-hex-32"
+    if not settings_obj.debug and settings_obj.jwt_secret_key == jwt_default:
+        errors.append("jwt_secret_key оставлен дефолтным в production — задайте openssl rand -hex 32")
+    if not settings_obj.debug and settings_obj.agent_wallet_private_key:
+        errors.append(
+            "agent_wallet_private_key в открытом виде в env — используйте "
+            "KeyVault (src/security/keyvault.py) и ONCHAIN_MASTER_KEY"
+        )
+    return errors

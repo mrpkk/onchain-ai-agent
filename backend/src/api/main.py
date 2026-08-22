@@ -31,9 +31,20 @@ from .models import (
     UserCreate,
     UserOut,
 )
-from ..config.settings import get_settings
+from ..config.settings import get_settings, validate_security
 
 settings = get_settings()
+
+# RTM NFR-1: security-гейт при старте (в debug только предупреждения)
+_security_issues = validate_security(settings)
+if _security_issues:
+    import logging
+    for issue in _security_issues:
+        logging.getLogger("uvicorn.error").error("SECURITY: %s", issue)
+    if not settings.debug:
+        raise RuntimeError(
+            "Отказ запуска: нарушения безопасности: " + "; ".join(_security_issues)
+        )
 app_start_time = time.time()
 
 # ── Password hashing ──────────────────────────────────────────────────
