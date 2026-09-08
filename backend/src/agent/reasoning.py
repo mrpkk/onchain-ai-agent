@@ -2,15 +2,35 @@
 Reasoning Layer — LLM-powered decision making for on-chain agents.
 
 Uses Chain-of-Thought prompting for reliable reasoning about blockchain operations.
+
+Приоритет провайдеров LLM:
+    1. GigaChat (Сбер, GigaChat-Max) — первичный, работает из РФ, freemium
+    2. Mistral AI (или совместимый API) — fallback
+Ключи читаются из ~/.env (GIGACHAT_AUTH_KEY, GIGACHAT_SCOPE, MISTRAL_API_KEY).
 """
 
 import json
 import logging
 import os
+import time
 from dataclasses import dataclass, field
 from typing import Optional
 
 import httpx
+from dotenv import load_dotenv
+
+# ── Загрузка ключей из ~/.env ─────────────────────────────────────────
+load_dotenv(os.path.expanduser("~/.env"), override=True)
+
+# ── GigaChat (Сбер) — первичный провайдер ─────────────────────────────
+GIGACHAT_OAUTH_URL = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
+GIGACHAT_BASE_URL = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
+GIGACHAT_MODEL = os.getenv("GIGACHAT_MODEL", "GigaChat-Max")
+GIGACHAT_SCOPE = os.getenv("GIGACHAT_SCOPE", "GIGACHAT_API_PERS")
+GIGACHAT_AUTH_KEY = os.getenv("GIGACHAT_AUTH_KEY", "")
+GIGACHAT_RQUID = os.getenv("GIGACHAT_RQUID", "6f0b1291-c7f3-43c6-bb2e-9f3efb2dc98e")
+
+_giga_token_cache: dict = {"token": None, "expires_at": 0}
 
 logger = logging.getLogger("agent.reasoning")
 
@@ -81,7 +101,12 @@ Respond with JSON only. No markdown."""
 
 
 class LLMReasoner:
-    """Makes decisions using an LLM (Mistral AI or compatible API)."""
+    """Makes decisions using an LLM.
+
+    Приоритет провайдеров:
+        1. GigaChat (Сбер, GigaChat-Max) — первичный
+        2. Mistral AI или совместимый API — fallback
+    """
 
     def __init__(self, api_key: Optional[str] = None, model: str = "mistral-small-latest",
                  base_url: str = "https://api.mistral.ai/v1"):
@@ -119,6 +144,16 @@ class LLMReasoner:
             )
 
     async def _call_llm(self, system: str, user: str, temperature: float = 0.3) -> str:
+        # ── 1. GigaChat (первичный провайдер) ──
+        if GIGACHAT_AUTH_KEY:
+            try:
+                text = await self._call_gigachat(system, user, temperature)
+                if text:
+                    return text
+            except Exception as e:
+                logger.warning(f"GigaChat failed, fallback to Mistral: {e}")
+
+        # ── 2. Mistral (fallback) ──
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 f"{self.base_url}/chat/completions",
@@ -139,6 +174,65 @@ class LLMReasoner:
             response.raise_for_status()
             data = response.json()
             return data["choices"][0]["message"]["content"]
+
+    async def _gigachat_access_token(self) -> Optional[str]:
+        """GigaChat OAuth: получить access_token (с кэшем на время жизни)."""
+        now = time.time()
+        if _giga_token_cache["token"] and _giga_token_cache["expires_at"] > now + 60:
+            return _giga_token_cache["token"]
+        try:
+            async with httpx.AsyncClient(timeout=15.0, verify=False) as client:
+                resp = await client.post(
+                    GIGACHAT_OAUTH_URL,
+                    data={"scope": GIGACHAT_SCOPE},
+                    headers={
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "Accept": "application/json",
+                        "RqUID": GIGACHAT_RQUID,
+                        "Authorization": f"Basic {GIGACHAT_AUTH_KEY}",
+                    },
+                )
+            if resp.status_code >= 400:
+                logger.warning(f"GigaChat auth {resp.status_code}: {resp.text[:200]}")
+                return None
+            data = resp.json()
+            token = data.get("access_token")
+            expires_in = data.get("expires_in", 1800)
+            if token:
+                _giga_token_cache["token"] = token
+                _giga_token_cache["expires_at"] = now + expires_in - 60
+                return token
+        except Exception as e:
+            logger.warning(f"GigaChat auth error: {e}")
+        return None
+
+    async def _call_gigachat(self, system: str, user: str, temperature: float = 0.3) -> str:
+        """GigaChat (Сбер) — первичный провайдер, работает из РФ."""
+        token = await self._gigachat_access_token()
+        if not token:
+            return ""
+        async with httpx.AsyncClient(timeout=120.0, verify=False) as client:
+            resp = await client.post(
+                GIGACHAT_BASE_URL,
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": GIGACHAT_MODEL,
+                    "messages": [
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user},
+                    ],
+                    "temperature": temperature,
+                    "max_tokens": 2048,
+                },
+            )
+        if resp.status_code == 200:
+            logger.info(f"GigaChat OK ({GIGACHAT_MODEL})")
+            return resp.json()["choices"][0]["message"]["content"]
+        logger.warning(f"GigaChat error {resp.status_code}: {resp.text[:200]}")
+        return ""
 
     def _parse_decision(self, text: str) -> AgentDecision:
         text = text.strip()
