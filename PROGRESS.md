@@ -32,7 +32,7 @@
 ## 🧭 ТЕКУЩИЙ ШАГ (обновлять при каждом слайсе)
 
 **Статус:** P0 (аудит) закрыт на 100% (S0-01…S0-05). Ожидание ответов владельца на STOP-GATE перед P1.
-**Следующее действие после «запускай S1-01»:** вычистка секретов + CI-scan + chmod 600.
+**Следующее действие:** S1-01 (ждёт решения владельца по переносу `backend/.env`), S1-03 (JWT refresh), S1-06 (Dharma), S1-07 (контракты), S1-08 (kill-drill).
 **Открытые STOP-GATE (6):** (1) execution-граница v2 = READ+SIMULATE+PROPOSE? (2) PG локально через docker-compose? (3) DeepSeek-ключ в `~/.env`? (4) перенос `backend/.env` → `~/.env` chmod 600? (5) футуристики F3→F2→F1→F8→F5? (6) фронтенд A (server-rendered, рекомендован) или B (React SPA)?
 
 ---
@@ -68,14 +68,14 @@
 
 ### P1 — Безопасность (цель 1–2 нед; каждый слайс — по команде)
 - [ ] S1-01 Секреты: `backend/.env` → `~/.env` (chmod 600), CI secret-scan (gitleaks + entropy)
-- [ ] S1-02 Argon2id (passlib: time_cost=3, memory=65536, parallelism=4) + миграция legacy sha256 при логине + тесты
+- [x] S1-02 Argon2id (passlib) + миграция legacy sha256 при логине + 8 тестов — `c0a6c97`
 - [ ] S1-03 JWT: access 15м + refresh 7д, ротация семейств, reuse-detection → revoke family, revocation-лист, rate-limit login 5/мин
-- [ ] S1-04 KeyVault-миграция: `core.py` без `config.private_key` (lazy `_ensure_wallet()`), guard-тест `test_no_direct_key_access.py`
-- [ ] S1-05 Scoped approve: запрет `2**256-1` (`INFINITE_APPROVE_BLOCKED`), точные суммы + auto-revoke, `tests/test_approve_security.py`
+- [x] S1-04 KeyVault-миграция: lazy `_ensure_wallet()`, guard-тест + поведенческие тесты (executor retry при RPC) — `7d24267`
+- [x] S1-05 Scoped approve: `_to_approve_amount` блокирует None/negative/max, `revoke_approve`, amount-паспорт из решений/планов — `f2bc393`
 - [ ] S1-06 Dharma MVP: `security/dharma/{dsl,compiler,evaluator,ctx}.py`, вердикты allow/deny/require_approval, лимиты во ВСЕХ путях, negative-тест «deploy при deny → deny», rollback `DHARMA_ENFORCE=off`
 - [ ] S1-07 Контракты: `Escrow.test.js` (≥10), `RicardianAgreement.test.js` (≥12), Slither+Aderyn в CI (0 HIGH), coverage ≥90%
 - [ ] S1-08 Kill-switch drill: soft/hard/dead-man, state machine, CI-тест
-- [ ] S1-09 Честный `/health` + `/health/deep`: реальные PG/Redis/RPC/LLM → ok/degraded/down (убрать `redis_connected=True`)
+- [x] S1-09 Честный `/health` + `/health/deep`: реальные TCP/RPC/LLM/KeyVault, статусы ok/degraded/down — `1d8f00b`
 
 ### P2 — Честный фундамент
 - [ ] S2-01 PG16 + async SQLAlchemy 2.0 + Alembic + repositories; рестарт не теряет данные (14 таблиц: SPEC §6.1)
@@ -128,6 +128,10 @@ F1 Gasless ERC-4337 · F2 Digital twin · F3 Copilot · F4 Intent-engine · F5 �
 | 01 | 2026-09-16 | Лого-концепты KARTA (3 SVG) + RTM-синк | `dbf5de4` | — | 3 варианта: чакра/монограмма/щит |
 | 02 | 2026-09-16 | Phase 0: AUDIT_REPORT + PROGRESS.md | `213a1bf` | 6/6 passed | 5 P0 подтверждены с file:line |
 | 03 | 2026-09-18 | S0-03/S0-04: ARCHITECTURE_CURRENT + THREAT_MODEL + мега-PROGRESS | `f40b6c6` | 6/6 passed | P0 полностью закрыт |
+| 04 | 2026-09-18 | S1-02 Argon2id + миграция legacy-хешей | `c0a6c97` | 14/14 passed | venv получил pytest+argon2-cffi |
+| 05 | 2026-09-18 | S1-04 KeyVault lazy-init + guard-тесты | `7d24267` | 21/21 passed | core.py чист; executor retryable |
+| 06 | 2026-09-18 | S1-05 Scoped approve (max заблокирован) | `f2bc393` | 27/27 passed | + revoke_approve; prompt LLM обновлён |
+| 07 | 2026-09-18 | S1-09 Честный health | `1d8f00b` | 33/33 passed | live: degraded (rpc down, redis ok, gigachat) |
 
 ## 💡 ИДЕИ НА ОБСУЖДЕНИЕ (новое — предлагать после отчётов)
 
