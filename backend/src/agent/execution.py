@@ -20,6 +20,16 @@ from web3 import Web3
 
 logger = logging.getLogger("agent.execution")
 
+MAX_UINT256 = 2**256 - 1
+
+
+class SecurityError(Exception):
+    """Нарушение политики безопасности (S1-05: approve-гигиена)."""
+
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+
 
 class TxStatus(Enum):
     PENDING = "pending"
@@ -249,6 +259,28 @@ class TransactionExecutor:
 
         return self._execute_with_retry(tx, value_eth, contract_address, chain)
 
+    @staticmethod
+    def _to_approve_amount(decimals: int, amount: float | None) -> int:
+        """Валидация суммы approve: только точные значения (S1-05).
+
+        None (бесконечный approve) и значения >= 2^256-1 блокируются политикой.
+        """
+        if amount is None:
+            raise SecurityError(
+                "AMOUNT_REQUIRED",
+                "Approve requires an explicit token amount; infinite approve is blocked",
+            )
+        if amount < 0:
+            raise SecurityError("NEGATIVE_AMOUNT", "Approve amount must be >= 0")
+        approve_amount = int(amount * (10 ** decimals))
+        if approve_amount >= MAX_UINT256:
+            raise SecurityError(
+                "INFINITE_APPROVE_BLOCKED",
+                f"Approval of {approve_amount} (max uint256) blocked by security policy. "
+                "Specify an exact token amount.",
+            )
+        return approve_amount
+
     def approve_token(self, token_address: str, spender: str,
                       amount: float = None, chain: str = "ethereum") -> TransactionResult:
         contract = self.w3.eth.contract(
@@ -257,10 +289,7 @@ class TransactionExecutor:
         )
 
         decimals = contract.functions.decimals().call()
-        if amount is None:
-            approve_amount = 2**256 - 1  # max approval
-        else:
-            approve_amount = int(amount * (10 ** decimals))
+        approve_amount = self._to_approve_amount(decimals, amount)
 
         gas_price = int(self.w3.eth.gas_price * self.GAS_MULTIPLIER)
         nonce = self.wallet.get_nonce(self.w3)
@@ -291,6 +320,11 @@ class TransactionExecutor:
         })
 
         return self._execute_with_retry(tx, 0, spender, chain)
+
+    def revoke_approve(self, token_address: str, spender: str,
+                       chain: str = "ethereum") -> TransactionResult:
+        """Отзыв allowance: approve(spender, 0)."""
+        return self.approve_token(token_address, spender, amount=0.0, chain=chain)
 
     def _execute_with_retry(self, tx: dict, value_eth: float,
                             to_address: str, chain: str) -> TransactionResult:

@@ -293,6 +293,7 @@ class OnChainAgent:
                 result = self.executor.approve_token(
                     token_address=step.params.get("token", ""),
                     spender=step.params.get("spender", ""),
+                    amount=step.params.get("amount"),
                     chain=step.chain,
                 )
                 step.result = result.to_dict()
@@ -345,6 +346,7 @@ class OnChainAgent:
             return self.executor.approve_token(
                 token_address=decision.params.get("token", ""),
                 spender=decision.params.get("spender", ""),
+                amount=decision.params.get("amount"),
                 chain=self.config.chain,
             )
         elif decision.action == "hold":

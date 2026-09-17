@@ -79,7 +79,7 @@ You MUST respond with valid JSON matching this schema:
 - transfer: {"to": "0x...", "amount": 0.1, "token": "ETH", "chain": "ethereum"}
 - contract_call: {"address": "0x...", "abi": [...], "function": "deposit", "args": [...], "value": 0}
 - deploy: {"contract": "RicardianAgreement", "constructor_args": [...]}
-- approve: {"token": "0x...", "spender": "0x...", "amount": "max"}
+- approve: {"token": "0x...", "spender": "0x...", "amount": 100.0}  # exact amount ONLY; infinite/max approval is blocked by security policy
 - swap: {"token_in": "0x...", "token_out": "0x...", "amount": 0.1, "dex": "uniswap"}
 - hold: {"reason": "Waiting for better conditions"}
 - ask_human: {"question": "What should I do?", "options": ["A", "B"]}
