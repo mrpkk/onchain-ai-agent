@@ -1,15 +1,14 @@
 {
-  "name": "smart-contracts",
+  "name": "karta-smart-contracts",
   "version": "1.0.0",
-  "description": "",
-  "main": "hardhat.config.js",
-  "directories": {
-    "test": "test"
-  },
+  "description": "KARTA smart contracts: AgentRegistry, Escrow, RicardianAgreement",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "hardhat test",
+    "compile": "hardhat compile"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC"
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/contracts": "^5.0.2",
+    "hardhat": "^2.22.0"
+  }
 }

@@ -40,6 +40,7 @@ contract RicardianAgreement {
         AgreementStatus status;
         uint8 signCount;
         mapping(address => bool) signers;
+        mapping(address => bool) members; // членство в соглашении (≠ подпись)
         mapping(uint256 => bool) milestoneDisputed;
     }
 
@@ -56,7 +57,7 @@ contract RicardianAgreement {
     error InvalidStatus(AgreementStatus expected, AgreementStatus actual);
     error InsufficientSignatures(uint8 required, uint8 actual);
     error MilestoneAlreadyCompleted();
-    error MilestoneDisputed();
+    error MilestoneAlreadyDisputed();
     error DeadlineNotReached();
     error DeadlinePassed();
     error TransferFailed();
@@ -125,16 +126,17 @@ contract RicardianAgreement {
         a.totalAmount = total;
         a.status = AgreementStatus.Draft;
 
-        // Add caller as first party
+        // Add caller as first party (creator is auto-signed, not counted)
         a.parties.push(msg.sender);
+        a.members[msg.sender] = true;
         a.signers[msg.sender] = true;
 
-        // Add remaining parties
+        // Add remaining parties as members (they sign explicitly)
         uint256 partyCount = parties_.length;
         for (uint256 i; i < partyCount; ++i) {
-            if (!a.signers[parties_[i]]) {
+            if (!a.members[parties_[i]]) {
                 a.parties.push(parties_[i]);
-                a.signers[parties_[i]] = true;
+                a.members[parties_[i]] = true;
             }
         }
 
@@ -192,7 +194,7 @@ contract RicardianAgreement {
         Milestone storage m = a.milestones[milestoneIndex];
 
         if (m.completed) revert MilestoneAlreadyCompleted();
-        if (a.milestoneDisputed[milestoneIndex]) revert MilestoneDisputed();
+        if (a.milestoneDisputed[milestoneIndex]) revert MilestoneAlreadyDisputed();
         if (block.timestamp < m.deadline) revert DeadlineNotReached();
 
         m.completed = true;
@@ -200,8 +202,7 @@ contract RicardianAgreement {
         emit MilestoneCompleted(agreementId, milestoneIndex);
 
         // Transfer funds
-        bool ok = a.token.safeTransfer(payee, m.amount);
-        if (!ok) revert TransferFailed();
+        a.token.safeTransfer(payee, m.amount);
         emit FundsReleased(agreementId, milestoneIndex, payee, m.amount);
 
         // Check if all milestones completed → agreement complete
@@ -230,7 +231,7 @@ contract RicardianAgreement {
         Milestone storage m = a.milestones[milestoneIndex];
 
         if (m.completed) revert MilestoneAlreadyCompleted();
-        if (a.milestoneDisputed[milestoneIndex]) revert MilestoneDisputed();
+        if (a.milestoneDisputed[milestoneIndex]) revert MilestoneAlreadyDisputed();
 
         a.milestoneDisputed[milestoneIndex] = true;
         a.status = AgreementStatus.Disputed;
@@ -300,6 +301,6 @@ contract RicardianAgreement {
     // ──────────────────────────── Internal ────────────────────────────
 
     function _isParty(Agreement storage a, address account) internal view returns (bool) {
-        return a.signers[account];
+        return a.members[account];
     }
 }

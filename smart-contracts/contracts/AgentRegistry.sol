@@ -29,6 +29,9 @@ contract AgentRegistry {
     /// @dev name => agentId (for uniqueness)
     mapping(bytes32 => uint256) public nameToAgentId;
 
+    /// @dev Отдельный флаг занятости имени (id=0 неотличим от «не зарегистрирован»).
+    mapping(bytes32 => bool) internal _nameUsed;
+
     /// @dev owner => agentId[] (for bulk queries)
     mapping(address => uint256[]) public ownerAgents;
 
@@ -72,7 +75,7 @@ contract AgentRegistry {
         if (bytes(metadataURI_).length == 0) revert URIEmpty();
 
         bytes32 nameHash = keccak256(abi.encodePacked(name_));
-        if (nameToAgentId[nameHash] != 0) revert NameTaken();
+        if (_nameUsed[nameHash]) revert NameTaken();
 
         agentId = nextAgentId++;
 
@@ -85,6 +88,7 @@ contract AgentRegistry {
         a.reputation = 0;
 
         nameToAgentId[nameHash] = agentId;
+        _nameUsed[nameHash] = true;
         ownerAgents[msg.sender].push(agentId);
         totalRegistered++;
 
