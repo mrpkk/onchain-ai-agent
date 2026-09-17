@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from web3 import Web3
+
 from .perception import BlockchainPerception, PriceOracle
 from .reasoning import LLMReasoner, RiskAssessor, AgentDecision
 from .planning import AgentPlanner, Plan, PlanStatus, StepType
@@ -18,6 +20,7 @@ from .execution import (
     WalletManager, TransactionExecutor, SpendingLimit,
     TransactionResult, TxStatus,
 )
+from ..security.keyvault import KeyVault
 
 logger = logging.getLogger("agent.core")
 
@@ -28,7 +31,6 @@ AGENT_STATE_DIR = Path(os.getenv("AGENT_STATE_DIR", "~/.onchain-agent/state")).e
 class AgentConfig:
     name: str
     chain: str = "ethereum"
-    private_key: str = ""
     daily_limit: float = 5.0
     per_tx_limit: float = 1.0
     auto_execute: bool = False
@@ -79,7 +81,8 @@ class AgentState:
 class OnChainAgent:
     """Autonomous AI agent that operates on EVM blockchains."""
 
-    def __init__(self, config: AgentConfig):
+    def __init__(self, config: AgentConfig, vault: Optional[KeyVault] = None,
+                 key_alias: str = "agent_wallet"):
         self.config = config
         self.agent_id = f"agent_{config.name.lower().replace(' ', '_')}"
 
@@ -92,21 +95,10 @@ class OnChainAgent:
         self.planner = AgentPlanner()
         self.risk_assessor = RiskAssessor()
 
+        self._vault = vault
+        self._key_alias = key_alias
         self.wallet: Optional[WalletManager] = None
         self.executor: Optional[TransactionExecutor] = None
-
-        if config.private_key:
-            self.wallet = WalletManager(config.private_key, config.chain)
-            w3 = self.perception.get_web3(config.chain)
-            if w3:
-                self.executor = TransactionExecutor(
-                    wallet=self.wallet,
-                    w3=w3,
-                    spending_limit=SpendingLimit(
-                        daily_limit=config.daily_limit,
-                        per_tx_limit=config.per_tx_limit,
-                    ),
-                )
 
         self.state = AgentState(
             agent_id=self.agent_id,
@@ -118,13 +110,48 @@ class OnChainAgent:
 
         AGENT_STATE_DIR.mkdir(parents=True, exist_ok=True)
 
+    def _ensure_wallet(self) -> Optional[WalletManager]:
+        """Ленивая инициализация кошелька из KeyVault (ключ не хранится в config).
+
+        Возвращает WalletManager или None, если vault не подключён / ключа нет —
+        агент продолжает работать без исполнения (fail-safe).
+        """
+        if self.wallet is not None:
+            pass
+        elif self._vault is None:
+            return None
+        else:
+            try:
+                private_key = self._vault.get_key(self._key_alias)
+            except KeyError:
+                logger.warning("KeyVault: ключ '%s' не найден — агент без кошелька", self._key_alias)
+                return None
+            except RuntimeError as e:
+                logger.error("KeyVault недоступен: %s", e)
+                return None
+            self.wallet = WalletManager(private_key, self.config.chain)
+            logger.info("Кошелёк инициализирован из KeyVault: %s", self.wallet.address)
+
+        if self.executor is None:
+            w3 = self.perception.get_web3(self.config.chain)
+            if w3:
+                self.executor = TransactionExecutor(
+                    wallet=self.wallet,
+                    w3=w3,
+                    spending_limit=SpendingLimit(
+                        daily_limit=self.config.daily_limit,
+                        per_tx_limit=self.config.per_tx_limit,
+                    ),
+                )
+        return self.wallet
+
     async def start(self):
         self._running = True
         self.state.status = "running"
         self._log_audit("agent_started", {"config": self.config.name})
         logger.info(f"Agent '{self.config.name}' started on {self.config.chain}")
 
-        if self.wallet:
+        if self._ensure_wallet() is not None:
             w3 = self.perception.get_web3(self.config.chain)
             if w3:
                 self.state.balance = self.wallet.get_token_balance(w3, "0x0000000000000000000000000000000000000000")
@@ -231,6 +258,11 @@ class OnChainAgent:
         logger.info(f"Executing step: {step.description}")
 
         try:
+            if step.step_type in (StepType.TRANSFER, StepType.CONTRACT_CALL, StepType.APPROVE):
+                self._ensure_wallet()
+                if self.executor is None:
+                    raise RuntimeError("Кошелёк не настроен (KeyVault): шаг требует исполнения")
+
             if step.step_type == StepType.READ_STATE:
                 state = await self._gather_state()
                 step.result = state
@@ -287,6 +319,13 @@ class OnChainAgent:
         })
 
     async def _execute_decision(self, decision: AgentDecision) -> TransactionResult:
+        self._ensure_wallet()
+        if decision.action in ("transfer", "contract_call", "approve") and self.executor is None:
+            return TransactionResult(
+                tx_hash="", status=TxStatus.FAILED, chain=self.config.chain,
+                from_address="", to_address="", value=0, gas_used=0, gas_price_gwei=0,
+                error="Wallet not configured (KeyVault): execution unavailable",
+            )
         if decision.action == "transfer":
             return self.executor.send_eth(
                 to_address=decision.params.get("to", ""),
@@ -334,7 +373,7 @@ class OnChainAgent:
         prices = await oracle.get_price()
         state["prices"] = {k: v.price_usd for k, v in prices.items()}
 
-        if self.wallet:
+        if self._ensure_wallet():
             w3 = self.perception.get_web3(self.config.chain)
             if w3:
                 state["wallet"] = {
