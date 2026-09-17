@@ -31,8 +31,9 @@
 
 ## 🧭 ТЕКУЩИЙ ШАГ (обновлять при каждом слайсе)
 
-**Статус:** P0 (аудит) закрыт на 100% (S0-01…S0-05). Ожидание ответов владельца на STOP-GATE перед P1.
-**Следующее действие:** S1-01 (ждёт решения владельца по переносу `backend/.env`), S1-03 (JWT refresh), S1-06 (Dharma), S1-07 (контракты), S1-08 (kill-drill).
+**Статус:** P0 закрыт 100%; **P1 «Безопасность» — 8/9 слайсов закрыто** (S1-02 · S1-04 · S1-05 · S1-06 · S1-08 · S1-09 · S1-03 · S1-07). Тесты: **140 зелёных** (backend 84 + контракты 56). Раннеры: `backend/.venv/bin/python -m pytest` и `npx hardhat test` (smart-contracts).
+**Ждёт владельца:** S1-01 — перенос `backend/.env` → `~/.env` (chmod 600). По команде «да» — финальный слайс и P1 закрыта полностью.
+**Следом (P2, по команде):** S2-01 PG+Alembic (agents/decisions/audit/RefreshStore → БД), S2-02 Sakshi Log с HMAC-цепочкой, S2-03 WS-события, S2-05 LLMProvider+structured output, S2-07 Mempool real/NOT_IMPLEMENTED, S2-08 README=код.
 **Открытые STOP-GATE (6):** (1) execution-граница v2 = READ+SIMULATE+PROPOSE? (2) PG локально через docker-compose? (3) DeepSeek-ключ в `~/.env`? (4) перенос `backend/.env` → `~/.env` chmod 600? (5) футуристики F3→F2→F1→F8→F5? (6) фронтенд A (server-rendered, рекомендован) или B (React SPA)?
 
 ---
@@ -69,11 +70,11 @@
 ### P1 — Безопасность (цель 1–2 нед; каждый слайс — по команде)
 - [ ] S1-01 Секреты: `backend/.env` → `~/.env` (chmod 600), CI secret-scan (gitleaks + entropy)
 - [x] S1-02 Argon2id (passlib) + миграция legacy sha256 при логине + 8 тестов — `c0a6c97`
-- [ ] S1-03 JWT: access 15м + refresh 7д, ротация семейств, reuse-detection → revoke family, revocation-лист, rate-limit login 5/мин
+- [x] S1-03 JWT-пара: `security/tokens.py` (access 15м + refresh 7д, type-claim, jti, family_id), ротация на каждом refresh, reuse-detection → отзыв всей семьи, эндпоинты `/auth/refresh` · `/auth/logout` · `/auth/revoke-all`, rate-limit логина 5/мин/IP (`api/ratelimit.py`), 14 тестов (unit+API) — `b5c81f5`. RefreshStore пока in-memory — PG-персистентность в S2-01.
 - [x] S1-04 KeyVault-миграция: lazy `_ensure_wallet()`, guard-тест + поведенческие тесты (executor retry при RPC) — `7d24267`
 - [x] S1-05 Scoped approve: `_to_approve_amount` блокирует None/negative/max, `revoke_approve`, amount-паспорт из решений/планов — `f2bc393`
 - [x] S1-06 Dharma MVP: `security/dharma/` (dsl/compiler/ctx/evaluator), 15 правил, гейт в обоих путях, negative-тесты, `DHARMA_ENFORCE=off` — `fbdd352`
-- [ ] S1-07 Контракты: `Escrow.test.js` (≥10), `RicardianAgreement.test.js` (≥12), Slither+Aderyn в CI (0 HIGH), coverage ≥90%
+- [x] S1-07 Контракты: **обнаружено, что контракты не компилировались вовсе**; исправлены 4 класса дефектов: (1) `bool ok = safeTransfer` ×5 — OZ v5 возвращает void; (2) коллизия `error MilestoneDisputed` ↔ `event MilestoneDisputed` (твердый запрет Solidity); (3) `signers` смешивал членство и подпись — ВСЕ участники помечались «уже подписавшими», активация 2-of-3 была **невозможна** → разделены `members`/`signers`; (4) guard дубликата имени `nameToAgentId != 0` не ловил id=0 → `_nameUsed`. Добавлены `contracts/mocks/MockERC20.sol`, тесты Escrow (17) + Ricardian (22) + AgentRegistry (17) = **56 зелёных**; CI: backend-сьют + `npx hardhat test` + Slither (`fail-on: high`) + Aderyn (soft — калибровка на subdir) — `0746648` + `cf2773f` + `2881461`
 - [x] S1-08 Kill-switch drill: `trigger_kill_switch(soft/hard)`, блок исполнения во всех путях, терминальный hard (без auto-resume), 5 тестов — `82f7826`
 - [x] S1-09 Честный `/health` + `/health/deep`: реальные TCP/RPC/LLM/KeyVault, статусы ok/degraded/down — `1d8f00b`
 
@@ -134,6 +135,8 @@ F1 Gasless ERC-4337 · F2 Digital twin · F3 Copilot · F4 Intent-engine · F5 �
 | 07 | 2026-09-18 | S1-09 Честный health | `1d8f00b` | 33/33 passed | live: degraded (rpc down, redis ok, gigachat) |
 | 08 | 2026-09-18 | S1-06 Dharma Engine MVP | `fbdd352` | 65/65 passed | 15 правил, allow/deny/require_approval, гейт в обоих путях |
 | 09 | 2026-09-18 | S1-08 Kill-switch drill | `82f7826` | 70/70 passed | soft/hard, терминальный, блок во всех путях |
+| 10 | 2026-09-18 | S1-03 JWT: ротация refresh, reuse-detection, revoke-all, rate-limit | `b5c81f5` | 84/84 passed | tokens.py + ratelimit.py; RefreshStore in-memory (PG → S2) |
+| 11 | 2026-09-18 | S1-07 Контракты: починена компиляция (4 бага), 56 контрактных тестов, CI Slither+Aderyn | `0746648` `cf2773f` `2881461` | 56 passing | до этого дня контракты не компилировались |
 
 ## 💡 ИДЕИ НА ОБСУЖДЕНИЕ (новое — предлагать после отчётов)
 
