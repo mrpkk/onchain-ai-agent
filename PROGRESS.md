@@ -61,8 +61,8 @@
 ### P0 — Аудит и правда (закрыт, без правок кода)
 - [x] S0-01 Инвентарь репозитория + PROGRESS.md — `dbf5de4`
 - [x] S0-02 `docs/AUDIT_REPORT.md` (actual-vs-claimed, P0–P3, file:line) — `213a1bf`
-- [x] S0-03 `docs/ARCHITECTURE_CURRENT.md` (фактическая архитектура) — `<hash>`
-- [x] S0-04 `docs/THREAT_MODEL.md` (STRIDE, T1–T8, контрмеры→тесты) — `<hash>`
+- [x] S0-03 `docs/ARCHITECTURE_CURRENT.md` (фактическая архитектура) — `f40b6c6`
+- [x] S0-04 `docs/THREAT_MODEL.md` (STRIDE, T1–T12, контрмеры→тесты) — `f40b6c6`
 - [x] S0-05 STOP-GATE вопросы владельцу (6 шт.) → **STOP** — этот файл
 - [x] Брендинг-концепты: `branding/karta-chakra.svg`, `karta-monogram.svg`, `karta-shield.svg` — `dbf5de4`
 
@@ -127,7 +127,7 @@ F1 Gasless ERC-4337 · F2 Digital twin · F3 Copilot · F4 Intent-engine · F5 �
 |---|---|---|---|---|---|
 | 01 | 2026-09-16 | Лого-концепты KARTA (3 SVG) + RTM-синк | `dbf5de4` | — | 3 варианта: чакра/монограмма/щит |
 | 02 | 2026-09-16 | Phase 0: AUDIT_REPORT + PROGRESS.md | `213a1bf` | 6/6 passed | 5 P0 подтверждены с file:line |
-| 03 | 2026-09-18 | S0-03/S0-04: ARCHITECTURE_CURRENT + THREAT_MODEL + мега-PROGRESS | `<hash>` | 6/6 passed | P0 полностью закрыт |
+| 03 | 2026-09-18 | S0-03/S0-04: ARCHITECTURE_CURRENT + THREAT_MODEL + мега-PROGRESS | `f40b6c6` | 6/6 passed | P0 полностью закрыт |
 
 ## 💡 ИДЕИ НА ОБСУЖДЕНИЕ (новое — предлагать после отчётов)
 
