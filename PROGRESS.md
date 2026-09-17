@@ -72,9 +72,9 @@
 - [ ] S1-03 JWT: access 15м + refresh 7д, ротация семейств, reuse-detection → revoke family, revocation-лист, rate-limit login 5/мин
 - [x] S1-04 KeyVault-миграция: lazy `_ensure_wallet()`, guard-тест + поведенческие тесты (executor retry при RPC) — `7d24267`
 - [x] S1-05 Scoped approve: `_to_approve_amount` блокирует None/negative/max, `revoke_approve`, amount-паспорт из решений/планов — `f2bc393`
-- [ ] S1-06 Dharma MVP: `security/dharma/{dsl,compiler,evaluator,ctx}.py`, вердикты allow/deny/require_approval, лимиты во ВСЕХ путях, negative-тест «deploy при deny → deny», rollback `DHARMA_ENFORCE=off`
+- [x] S1-06 Dharma MVP: `security/dharma/` (dsl/compiler/ctx/evaluator), 15 правил, гейт в обоих путях, negative-тесты, `DHARMA_ENFORCE=off` — `fbdd352`
 - [ ] S1-07 Контракты: `Escrow.test.js` (≥10), `RicardianAgreement.test.js` (≥12), Slither+Aderyn в CI (0 HIGH), coverage ≥90%
-- [ ] S1-08 Kill-switch drill: soft/hard/dead-man, state machine, CI-тест
+- [x] S1-08 Kill-switch drill: `trigger_kill_switch(soft/hard)`, блок исполнения во всех путях, терминальный hard (без auto-resume), 5 тестов — `82f7826`
 - [x] S1-09 Честный `/health` + `/health/deep`: реальные TCP/RPC/LLM/KeyVault, статусы ok/degraded/down — `1d8f00b`
 
 ### P2 — Честный фундамент
@@ -132,6 +132,8 @@ F1 Gasless ERC-4337 · F2 Digital twin · F3 Copilot · F4 Intent-engine · F5 �
 | 05 | 2026-09-18 | S1-04 KeyVault lazy-init + guard-тесты | `7d24267` | 21/21 passed | core.py чист; executor retryable |
 | 06 | 2026-09-18 | S1-05 Scoped approve (max заблокирован) | `f2bc393` | 27/27 passed | + revoke_approve; prompt LLM обновлён |
 | 07 | 2026-09-18 | S1-09 Честный health | `1d8f00b` | 33/33 passed | live: degraded (rpc down, redis ok, gigachat) |
+| 08 | 2026-09-18 | S1-06 Dharma Engine MVP | `fbdd352` | 65/65 passed | 15 правил, allow/deny/require_approval, гейт в обоих путях |
+| 09 | 2026-09-18 | S1-08 Kill-switch drill | `82f7826` | 70/70 passed | soft/hard, терминальный, блок во всех путях |
 
 ## 💡 ИДЕИ НА ОБСУЖДЕНИЕ (новое — предлагать после отчётов)
 
