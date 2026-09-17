@@ -21,6 +21,10 @@ from .execution import (
     TransactionResult, TxStatus,
 )
 from ..security.keyvault import KeyVault
+from ..security.dharma import (
+    CompiledPolicy, TxContext, Verdict, VerdictDecision,
+    build_default_policy, evaluate as dharma_evaluate,
+)
 
 logger = logging.getLogger("agent.core")
 
@@ -82,7 +86,8 @@ class OnChainAgent:
     """Autonomous AI agent that operates on EVM blockchains."""
 
     def __init__(self, config: AgentConfig, vault: Optional[KeyVault] = None,
-                 key_alias: str = "agent_wallet"):
+                 key_alias: str = "agent_wallet",
+                 policy: Optional[CompiledPolicy] = None):
         self.config = config
         self.agent_id = f"agent_{config.name.lower().replace(' ', '_')}"
 
@@ -99,6 +104,15 @@ class OnChainAgent:
         self._key_alias = key_alias
         self.wallet: Optional[WalletManager] = None
         self.executor: Optional[TransactionExecutor] = None
+
+        self.policy = policy or build_default_policy(
+            per_tx_eth=config.per_tx_limit, daily_eth=config.daily_limit,
+        )
+        self._dharma_enforce = os.getenv("DHARMA_ENFORCE", "on").strip().lower() not in (
+            "off", "0", "false", "no",
+        )
+        self._execution_times: list[datetime] = []
+        self._revert_streak = 0
 
         self.state = AgentState(
             agent_id=self.agent_id,
@@ -144,6 +158,39 @@ class OnChainAgent:
                     ),
                 )
         return self.wallet
+
+    _CHAIN_IDS = {"ethereum": 1, "bsc": 56, "polygon": 137, "sepolia": 11155111}
+    _RISK_SCORES = {"low": 0.2, "medium": 0.5, "high": 0.8, "critical": 1.0}
+
+    def _policy_gate(self, action: str, params: dict, risk_level: str = "medium",
+                     new_spender: bool = False) -> Optional[Verdict]:
+        """Дхарма-гейт перед исполнением. None — если enforcement выключен."""
+        if not self._dharma_enforce:
+            return None
+        gas_price = 0.0
+        try:
+            gas_price = float(self.perception.get_gas_price(self.config.chain) or 0.0)
+        except Exception as e:
+            logger.warning("Dharma: gas price недоступен (%s) — газ-кап пропущен", e)
+        ctx = TxContext(
+            action=action,
+            params=params or {},
+            chain_id=self._CHAIN_IDS.get(self.config.chain),
+            gas_price_gwei=gas_price,
+            spent_today_eth=self.state.daily_spend,
+            recent_tx=list(self._execution_times),
+            revert_streak=self._revert_streak,
+            risk_score=self._RISK_SCORES.get(risk_level, 0.5),
+            new_spender=new_spender,
+        )
+        verdict = dharma_evaluate(self.policy, ctx)
+        self._log_audit("policy_verdict", {
+            "action": action,
+            "decision": verdict.decision.value,
+            "reasons": verdict.reasons,
+            "rule_ids": verdict.rule_ids,
+        })
+        return verdict
 
     async def start(self):
         self._running = True
@@ -259,6 +306,19 @@ class OnChainAgent:
 
         try:
             if step.step_type in (StepType.TRANSFER, StepType.CONTRACT_CALL, StepType.APPROVE):
+                verdict = self._policy_gate(step.step_type.value, step.params)
+                if verdict is not None:
+                    if verdict.decision == VerdictDecision.DENY:
+                        step.status = PlanStatus.FAILED
+                        step.error = "Policy denied: " + "; ".join(verdict.reasons)
+                        self._log_audit("policy_denied", {"step_id": step.id, "reasons": verdict.reasons})
+                        return
+                    if verdict.decision == VerdictDecision.REQUIRE_APPROVAL:
+                        step.status = PlanStatus.BLOCKED
+                        step.error = "Policy requires approval: " + "; ".join(verdict.reasons)
+                        self.state.status = "awaiting_approval"
+                        self._log_audit("policy_require_approval", {"step_id": step.id, "reasons": verdict.reasons})
+                        return
                 self._ensure_wallet()
                 if self.executor is None:
                     raise RuntimeError("Кошелёк не настроен (KeyVault): шаг требует исполнения")
@@ -313,6 +373,13 @@ class OnChainAgent:
             step.status = PlanStatus.FAILED
             logger.error(f"Step failed: {e}")
 
+        if step.step_type in (StepType.TRANSFER, StepType.CONTRACT_CALL, StepType.APPROVE):
+            self._execution_times.append(datetime.now(timezone.utc))
+            if step.status == PlanStatus.COMPLETED:
+                self._revert_streak = 0
+            elif step.status == PlanStatus.FAILED:
+                self._revert_streak += 1
+
         self._log_audit("step_executed", {
             "step_id": step.id,
             "type": step.step_type.value,
@@ -320,6 +387,20 @@ class OnChainAgent:
         })
 
     async def _execute_decision(self, decision: AgentDecision) -> TransactionResult:
+        if decision.action in ("transfer", "contract_call", "approve"):
+            verdict = self._policy_gate(decision.action, decision.params,
+                                        risk_level=decision.risk_level)
+            if verdict is not None and verdict.decision != VerdictDecision.ALLOW:
+                self._log_audit(f"policy_{verdict.decision.value}", {
+                    "action": decision.action, "reasons": verdict.reasons,
+                })
+                if verdict.decision == VerdictDecision.REQUIRE_APPROVAL:
+                    self.state.status = "awaiting_approval"
+                return TransactionResult(
+                    tx_hash="", status=TxStatus.FAILED, chain=self.config.chain,
+                    from_address="", to_address="", value=0, gas_used=0, gas_price_gwei=0,
+                    error=f"Policy {verdict.decision.value}: " + "; ".join(verdict.reasons),
+                )
         self._ensure_wallet()
         if decision.action in ("transfer", "contract_call", "approve") and self.executor is None:
             return TransactionResult(
@@ -392,8 +473,14 @@ class OnChainAgent:
         self.state.total_transactions += 1
         if result.status == TxStatus.CONFIRMED:
             self.state.successful_transactions += 1
+            self._revert_streak = 0
+            if result.value > 0:
+                self.state.daily_spend += result.value
         else:
             self.state.failed_transactions += 1
+            if result.status in (TxStatus.REVERTED, TxStatus.FAILED):
+                self._revert_streak += 1
+        self._execution_times.append(datetime.now(timezone.utc))
         self.state.last_action = f"{result.status.value}:{result.tx_hash[:10]}"
         self.state.last_action_time = datetime.now(timezone.utc)
         self.state.status = "running"

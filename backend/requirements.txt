@@ -10,3 +10,4 @@ python-dotenv>=1.0.0
 aiohttp>=3.11.0
 sqlalchemy>=2.0.0
 alembic>=1.14.0
+pyyaml>=6.0
