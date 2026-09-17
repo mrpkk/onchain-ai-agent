@@ -305,6 +305,12 @@ class OnChainAgent:
         logger.info(f"Executing step: {step.description}")
 
         try:
+            if self._kill_switch_active():
+                step.status = PlanStatus.FAILED
+                step.error = "Kill switch active: execution blocked"
+                self._log_audit("kill_switch_block", {"step_id": step.id})
+                return
+
             if step.step_type in (StepType.TRANSFER, StepType.CONTRACT_CALL, StepType.APPROVE):
                 verdict = self._policy_gate(step.step_type.value, step.params)
                 if verdict is not None:
@@ -386,7 +392,24 @@ class OnChainAgent:
             "status": step.status.value,
         })
 
+    def trigger_kill_switch(self, mode: str = "hard", reason: str = "") -> None:
+        """Soft — пауза новых действий; hard — терминальная остановка без auto-resume."""
+        self.state.status = "killed" if mode == "hard" else "paused"
+        if mode == "hard":
+            self.config.kill_switch = True
+        self._log_audit("kill_switch", {"mode": mode, "reason": reason})
+
+    def _kill_switch_active(self) -> bool:
+        return self.config.kill_switch or self.state.status in ("killed", "paused")
+
     async def _execute_decision(self, decision: AgentDecision) -> TransactionResult:
+        if self._kill_switch_active():
+            self._log_audit("kill_switch_block", {"action": decision.action})
+            return TransactionResult(
+                tx_hash="", status=TxStatus.FAILED, chain=self.config.chain,
+                from_address="", to_address="", value=0, gas_used=0, gas_price_gwei=0,
+                error="Kill switch active: execution blocked",
+            )
         if decision.action in ("transfer", "contract_call", "approve"):
             verdict = self._policy_gate(decision.action, decision.params,
                                         risk_level=decision.risk_level)
