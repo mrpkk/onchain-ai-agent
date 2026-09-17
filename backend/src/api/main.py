@@ -1,15 +1,15 @@
 from __future__ import annotations
 
+import logging
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
 from pydantic import BaseModel
 
 from .models import (
@@ -21,6 +21,7 @@ from .models import (
     GoalRequest,
     HealthResponse,
     KillSwitchRequest,
+    RefreshRequest,
     TokenRequest,
     TokenResponse,
     TransactionListResponse,
@@ -31,7 +32,16 @@ from .models import (
 )
 from ..config.settings import get_settings, validate_security
 from ..security.passwords import hash_password, verify_and_upgrade
+from ..security.tokens import (
+    ACCESS,
+    REFRESH,
+    RefreshStore,
+    TokenError,
+    create_token,
+    decode_token,
+)
 from .health import collect_health
+from .ratelimit import SlidingWindowLimiter
 
 settings = get_settings()
 
@@ -93,13 +103,26 @@ app.add_middleware(
 
 # ── JWT helpers ────────────────────────────────────────────────────────
 
-def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
-    to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (
-        expires_delta or timedelta(minutes=settings.jwt_access_token_expire_minutes)
-    )
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+_refresh_store = RefreshStore()
+_login_limiter = SlidingWindowLimiter(max_attempts=5, window_sec=60.0)
+
+
+def _issue_token_pair(username: str, family_id: str | None = None) -> tuple[TokenResponse, str]:
+    """Выдаёт access+refresh одной семьи; возвращает пару и jti refresh-токена."""
+    now = datetime.now(timezone.utc)
+    access_minutes = settings.jwt_access_token_expire_minutes
+    refresh_days = settings.jwt_refresh_token_expire_days
+    access = create_token(username, settings.jwt_secret_key, settings.jwt_algorithm,
+                          token_type=ACCESS, expires_delta=timedelta(minutes=access_minutes))
+    jti = uuid.uuid4().hex
+    family = family_id or uuid.uuid4().hex
+    refresh = create_token(username, settings.jwt_secret_key, settings.jwt_algorithm,
+                           token_type=REFRESH, expires_delta=timedelta(days=refresh_days),
+                           family_id=family, jti=jti)
+    _refresh_store.add(jti, family, username, now + timedelta(days=refresh_days))
+    response = TokenResponse(access_token=access, refresh_token=refresh,
+                             expires_in=access_minutes * 60)
+    return response, jti
 
 
 async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> dict:
@@ -109,11 +132,10 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> dic
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        payload = decode_token(token, settings.jwt_secret_key, settings.jwt_algorithm,
+                               expected_type=ACCESS)
         username: str | None = payload.get("sub")
-        if username is None:
-            raise credentials_exc
-    except JWTError:
+    except TokenError:
         raise credentials_exc
     user = _users_db.get(username)
     if user is None:
@@ -137,7 +159,10 @@ async def register(body: UserCreate):
 
 
 @app.post("/api/v1/auth/token", response_model=TokenResponse)
-async def login(body: TokenRequest):
+async def login(body: TokenRequest, request: Request):
+    client = request.client.host if request.client else "unknown"
+    if not _login_limiter.allow(client):
+        raise HTTPException(status_code=429, detail="Too many login attempts, try later")
     user = _users_db.get(body.username)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -146,8 +171,41 @@ async def login(body: TokenRequest):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     if upgraded:
         user["hashed_password"] = upgraded  # миграция legacy → Argon2id
-    token = create_access_token({"sub": user["username"]})
-    return TokenResponse(access_token=token)
+    pair, _ = _issue_token_pair(user["username"])
+    return pair
+
+
+@app.post("/api/v1/auth/refresh", response_model=TokenResponse)
+async def refresh_tokens(body: RefreshRequest):
+    """Ротация refresh-пары; повторное использование → отзыв всей семьи (S1-03)."""
+    try:
+        payload = decode_token(body.refresh_token, settings.jwt_secret_key,
+                               settings.jwt_algorithm, expected_type=REFRESH)
+    except TokenError:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    record = _refresh_store.get(payload.get("jti", ""))
+    now = datetime.now(timezone.utc)
+    if record is None or record.expires_at <= now:
+        raise HTTPException(status_code=401, detail="Refresh token expired or unknown")
+    if record.revoked:
+        _refresh_store.revoke_family(record.family_id)
+        logging.getLogger("uvicorn.error").warning(
+            "REFRESH REUSE detected user=%s family=%s — family revoked",
+            record.sub, record.family_id)
+        raise HTTPException(status_code=401, detail="Refresh token reuse detected; sessions revoked")
+    if record.sub not in _users_db:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    pair, new_jti = _issue_token_pair(record.sub, family_id=record.family_id)
+    _refresh_store.rotate(record.jti, new_jti)
+    return pair
+
+
+@app.post("/api/v1/auth/logout")
+@app.post("/api/v1/auth/revoke-all")
+async def revoke_all_tokens(current_user: Annotated[dict, Depends(get_current_user)]):
+    """Отзыв всех refresh-сессий пользователя."""
+    revoked = _refresh_store.revoke_all_for_user(current_user["username"])
+    return {"status": "ok", "revoked": revoked}
 
 
 # ── Agent CRUD ─────────────────────────────────────────────────────────

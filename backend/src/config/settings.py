@@ -27,7 +27,8 @@ class Settings(BaseSettings):
     # Auth — JWT
     jwt_secret_key: str = "CHANGE-ME-in-production-use-openssl-rand-hex-32"
     jwt_algorithm: str = "HS256"
-    jwt_access_token_expire_minutes: int = 60
+    jwt_access_token_expire_minutes: int = 15
+    jwt_refresh_token_expire_days: int = 7
 
     # Database (PostgreSQL async)
     database_url: str = "postgresql+asyncpg://agent:agent@localhost:5432/onchain_ai"
