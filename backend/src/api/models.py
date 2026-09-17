@@ -121,5 +121,4 @@ class HealthResponse(BaseModel):
     version: str
     uptime: float
     agents_active: int
-    blockchain_connected: bool
-    redis_connected: bool
+    components: dict

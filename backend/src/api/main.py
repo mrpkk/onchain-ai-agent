@@ -31,6 +31,7 @@ from .models import (
 )
 from ..config.settings import get_settings, validate_security
 from ..security.passwords import hash_password, verify_and_upgrade
+from .health import collect_health
 
 settings = get_settings()
 
@@ -292,19 +293,25 @@ async def list_transactions(
 @app.get("/api/v1/health", response_model=HealthResponse)
 async def health():
     active = sum(1 for a in _agents_db.values() if a["status"] == AgentStatus.RUNNING)
+    real = await collect_health(settings, app_start_time)
     return HealthResponse(
-        status="ok",
+        status=real["status"],
         version=settings.app_version,
-        uptime=round(time.time() - app_start_time, 2),
+        uptime=real["uptime"],
         agents_active=active,
-        blockchain_connected=True,
-        redis_connected=True,
+        components=real["components"],
     )
 
 
 @app.get("/health")
 async def root_health():
-    return {"status": "ok"}
+    return await collect_health(settings, app_start_time)
+
+
+@app.get("/health/deep")
+async def deep_health():
+    real = await collect_health(settings, app_start_time)
+    return {"version": settings.app_version, **real}
 
 
 ROOT_HTML = r"""<!DOCTYPE html>
