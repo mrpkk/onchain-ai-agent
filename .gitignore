@@ -5,3 +5,7 @@ __pycache__/
 
 # Internal freelance listings
 freelance/
+
+# Hardhat artifacts
+smart-contracts/artifacts/
+smart-contracts/cache/

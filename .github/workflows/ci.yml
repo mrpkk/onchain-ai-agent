@@ -1,15 +1,38 @@
 name: CI
 on:
-  push: { branches: [main, master] }
+  push: { branches: [main, master, "feature/v2-modernization"] }
+  pull_request: {}
 jobs:
-  test:
+  backend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install pytest cryptography eth-account
-      - name: Security tests (KeyVault, redaction, JWT-gate)
-        run: python3 -m pytest backend/tests/test_security.py -q
-      - name: Secret scan
+      - run: pip install -r backend/requirements.txt pytest
+      - name: Backend tests (security, dharma, auth, health)
+        run: python3 -m pytest backend/tests -q
+      - name: Secret scan (private keys)
         run: "! grep -rnE '0x[a-f0-9]{64}' backend/src --include='*.py'"
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - name: Install dependencies
+        working-directory: smart-contracts
+        run: npm ci
+      - name: Contract tests
+        working-directory: smart-contracts
+        run: npx hardhat test
+      - name: Slither (fail on high)
+        uses: crytic/slither-action@v0.4.0
+        with:
+          target: smart-contracts/
+          fail-on: high
+      - name: Aderyn (soft check)
+        continue-on-error: true
+        uses: Cyfrin/aderyn-ci@v0
+        with:
+          fail-on: high
