@@ -10,8 +10,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-import hashlib
-import secrets
 from pydantic import BaseModel
 
 from .models import (
@@ -32,6 +30,7 @@ from .models import (
     UserOut,
 )
 from ..config.settings import get_settings, validate_security
+from ..security.passwords import hash_password, verify_and_upgrade
 
 settings = get_settings()
 
@@ -48,15 +47,8 @@ if _security_issues:
 app_start_time = time.time()
 
 # ── Password hashing ──────────────────────────────────────────────────
-
-def hash_password(password: str) -> str:
-    salt = secrets.token_hex(16)
-    h = hashlib.sha256((password + salt).encode()).hexdigest()
-    return f"{salt}:{h}"
-
-def verify_password(password: str, hashed: str) -> bool:
-    salt, h = hashed.split(":", 1)
-    return hashlib.sha256((password + salt).encode()).hexdigest() == h
+# Argon2id + миграция legacy-хешей: см. src/security/passwords.py (S1-02).
+# hash_password / verify_and_upgrade импортированы из security-модуля.
 
 # ── OAuth2 ─────────────────────────────────────────────────────────────
 
@@ -146,8 +138,13 @@ async def register(body: UserCreate):
 @app.post("/api/v1/auth/token", response_model=TokenResponse)
 async def login(body: TokenRequest):
     user = _users_db.get(body.username)
-    if not user or not verify_password(body.password, user["hashed_password"]):
+    if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    ok, upgraded = verify_and_upgrade(body.password, user["hashed_password"])
+    if not ok:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    if upgraded:
+        user["hashed_password"] = upgraded  # миграция legacy → Argon2id
     token = create_access_token({"sub": user["username"]})
     return TokenResponse(access_token=token)
 
