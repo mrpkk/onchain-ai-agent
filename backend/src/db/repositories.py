@@ -9,7 +9,7 @@ from typing import Optional, Sequence
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import Agent, Transaction, User
+from .models import Agent, Decision, Transaction, User
 
 
 def _utcnow() -> datetime:
@@ -106,5 +106,45 @@ class TransactionRepository:
         result = await self.session.execute(
             sa.select(sa.func.count()).select_from(Transaction)
             .where(Transaction.agent_id == agent_id)
+        )
+        return int(result.scalar_one())
+
+
+class DecisionRepository:
+    """Decision Diary (S2-02): тезис ДО — запись каждого решения агента."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def add(self, agent_id: uuid.UUID, *, action: str, params: dict | None = None,
+                  goal: str | None = None, reasoning: str | None = None,
+                  alternatives: list | None = None, confidence: float | None = None,
+                  risk_level: str | None = None, risk_score: float | None = None,
+                  policy_verdict: dict | None = None,
+                  requires_approval: bool = False,
+                  status: str = "proposed") -> Decision:
+        decision = Decision(
+            agent_id=agent_id, action=action, params=params or {}, goal=goal,
+            reasoning=reasoning, alternatives=alternatives, confidence=confidence,
+            risk_level=risk_level, risk_score=risk_score,
+            policy_verdict=policy_verdict, requires_approval=requires_approval,
+            status=status, data_as_of=_utcnow(),
+        )
+        self.session.add(decision)
+        await self.session.flush()
+        return decision
+
+    async def list_for_agent(self, agent_id: uuid.UUID, offset: int = 0,
+                             limit: int = 50) -> Sequence[Decision]:
+        result = await self.session.execute(
+            sa.select(Decision).where(Decision.agent_id == agent_id)
+            .order_by(Decision.created_at.desc()).offset(offset).limit(limit)
+        )
+        return result.scalars().all()
+
+    async def count_for_agent(self, agent_id: uuid.UUID) -> int:
+        result = await self.session.execute(
+            sa.select(sa.func.count()).select_from(Decision)
+            .where(Decision.agent_id == agent_id)
         )
         return int(result.scalar_one())

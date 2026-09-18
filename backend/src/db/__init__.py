@@ -18,7 +18,7 @@ from .models import (
     User,
     Wallet,
 )
-from .repositories import AgentRepository, TransactionRepository, UserRepository
+from .repositories import AgentRepository, DecisionRepository, TransactionRepository, UserRepository
 
 __all__ = [
     "Agent",
@@ -28,6 +28,7 @@ __all__ = [
     "AuditEvent",
     "Base",
     "Decision",
+    "DecisionRepository",
     "Plan",
     "Policy",
     "ProviderHealth",

@@ -173,7 +173,10 @@ class Transaction(Base):
 class AuditEvent(Base):
     __tablename__ = "audit_events"
 
-    id: Mapped[int] = mapped_column(sa.BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(
+        sa.BigInteger().with_variant(sa.Integer(), "sqlite"),
+        primary_key=True, autoincrement=True,
+    )
     agent_id: Mapped[uuid.UUID | None] = mapped_column(sa.ForeignKey("agents.id"), nullable=True, index=True)
     actor: Mapped[str] = mapped_column(sa.String(16), default="system")  # user|agent|system|policy
     event_type: Mapped[str] = mapped_column(sa.String(64), index=True)

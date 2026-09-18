@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,7 +21,9 @@ from .execution import (
     WalletManager, TransactionExecutor, SpendingLimit,
     TransactionResult, TxStatus,
 )
+from ..db import DecisionRepository, session_scope
 from ..security.keyvault import KeyVault
+from ..security.sakshi import SakshiLog
 from ..security.dharma import (
     CompiledPolicy, TxContext, Verdict, VerdictDecision,
     build_default_policy, evaluate as dharma_evaluate,
@@ -87,7 +90,9 @@ class OnChainAgent:
 
     def __init__(self, config: AgentConfig, vault: Optional[KeyVault] = None,
                  key_alias: str = "agent_wallet",
-                 policy: Optional[CompiledPolicy] = None):
+                 policy: Optional[CompiledPolicy] = None,
+                 db_agent_id: Optional[uuid.UUID] = None,
+                 sakshi: Optional[SakshiLog] = None):
         self.config = config
         self.agent_id = f"agent_{config.name.lower().replace(' ', '_')}"
 
@@ -113,6 +118,8 @@ class OnChainAgent:
         )
         self._execution_times: list[datetime] = []
         self._revert_streak = 0
+        self._db_agent_id = db_agent_id
+        self._sakshi = sakshi
 
         self.state = AgentState(
             agent_id=self.agent_id,
@@ -192,6 +199,36 @@ class OnChainAgent:
         })
         return verdict
 
+    async def _sakshi_append(self, event_type: str, payload: dict, actor: str = "agent") -> None:
+        """Запись события в Sakshi Log (если подключены БД-агент и аудит)."""
+        if self._sakshi is None or self._db_agent_id is None:
+            return
+        try:
+            async with session_scope() as session:
+                await self._sakshi.append(session, actor=actor, event_type=event_type,
+                                          payload=payload, agent_id=self._db_agent_id)
+        except Exception as e:
+            logger.error("Sakshi: не удалось записать событие %s: %s", event_type, e)
+
+    async def _persist_decision(self, decision: AgentDecision, verdict=None) -> None:
+        """Decision Diary: запись решения агента (тезис ДО) в decisions."""
+        if self._db_agent_id is None:
+            return
+        try:
+            async with session_scope() as session:
+                await DecisionRepository(session).add(
+                    self._db_agent_id,
+                    action=decision.action,
+                    params=decision.params,
+                    reasoning=decision.reasoning,
+                    confidence=decision.confidence,
+                    risk_level=decision.risk_level,
+                    policy_verdict=verdict.to_dict() if verdict is not None else None,
+                    requires_approval=decision.requires_approval,
+                )
+        except Exception as e:
+            logger.error("Decision diary: не удалось записать решение: %s", e)
+
     async def start(self):
         self._running = True
         self.state.status = "running"
@@ -250,6 +287,14 @@ class OnChainAgent:
             self.state.balance,
             self.state.daily_spend,
         )
+
+        await self._persist_decision(decision)
+        await self._sakshi_append("decision_made", {
+            "action": decision.action,
+            "confidence": decision.confidence,
+            "risk_level": decision.risk_level,
+            "reasoning": (decision.reasoning or "")[:300],
+        })
 
         self._log_audit("decision_made", {
             "action": decision.action,
@@ -413,6 +458,10 @@ class OnChainAgent:
         if decision.action in ("transfer", "contract_call", "approve"):
             verdict = self._policy_gate(decision.action, decision.params,
                                         risk_level=decision.risk_level)
+            if verdict is not None:
+                await self._sakshi_append("policy_verdict", {
+                    "action": decision.action, **verdict.to_dict(),
+                })
             if verdict is not None and verdict.decision != VerdictDecision.ALLOW:
                 self._log_audit(f"policy_{verdict.decision.value}", {
                     "action": decision.action, "reasons": verdict.reasons,
