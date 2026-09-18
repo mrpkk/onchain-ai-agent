@@ -33,7 +33,7 @@
 
 **Статус:** P0 закрыт 100%; **P1 «Безопасность» — 8/9 слайсов закрыто** (S1-02 · S1-04 · S1-05 · S1-06 · S1-08 · S1-09 · S1-03 · S1-07). Тесты: **140 зелёных** (backend 84 + контракты 56). Раннеры: `backend/.venv/bin/python -m pytest` и `npx hardhat test` (smart-contracts).
 **Ждёт владельца:** S1-01 — перенос `backend/.env` → `~/.env` (chmod 600). По команде «да» — финальный слайс и P1 закрыта полностью.
-**Следом (P2, по команде):** S2-01 PG+Alembic (agents/decisions/audit/RefreshStore → БД), S2-02 Sakshi Log с HMAC-цепочкой, S2-03 WS-события, S2-05 LLMProvider+structured output, S2-07 Mempool real/NOT_IMPLEMENTED, S2-08 README=код.
+**Следом (P2, по команде):** S2-01 ✅ → далее S2-02 Sakshi Log (HMAC-цепочка, запись каждого решения в `audit_events`), S2-03 WS-события, S2-05 LLMProvider+structured output, S2-07 Mempool real/NOT_IMPLEMENTED, S2-08 README=код. Плюс долг: RefreshStore → таблица `refresh_tokens` (сейчас in-memory), decision-diary запись в `decisions` (таблица готова).
 **Открытые STOP-GATE (6):** (1) execution-граница v2 = READ+SIMULATE+PROPOSE? (2) PG локально через docker-compose? (3) DeepSeek-ключ в `~/.env`? (4) перенос `backend/.env` → `~/.env` chmod 600? (5) футуристики F3→F2→F1→F8→F5? (6) фронтенд A (server-rendered, рекомендован) или B (React SPA)?
 
 ---
@@ -79,7 +79,7 @@
 - [x] S1-09 Честный `/health` + `/health/deep`: реальные TCP/RPC/LLM/KeyVault, статусы ok/degraded/down — `1d8f00b`
 
 ### P2 — Честный фундамент
-- [ ] S2-01 PG16 + async SQLAlchemy 2.0 + Alembic + repositories; рестарт не теряет данные (14 таблиц: SPEC §6.1)
+- [x] S2-01 PostgreSQL: 14 таблиц (SPEC §6.1) в `backend/src/db/models.py` (кросс-диалектные UUID/JSON: PG-JSONB ↔ SQLite), async engine/session + `session_scope()` (`db/database.py`), репозитории User/Agent/Transaction (`db/repositories.py`), Alembic (async env, миграция `17e2466e8f71` применена на живой PG). API переведён с in-memory dict'ов на репозитории (users/agents/transactions; health считает running из БД). Тесты: **3 персистентности** («рестарт» = reset_engine → данные живы) на SQLite + смоук на реальном PG (register→login→create→list, строки в таблицах подтверждены psql). Dev-PG: docker-контейнер `karta-postgres` (порт **5433**, agent/agent, volume `karta_pgdata`); compose-порты выровнены (PG 5433, Redis 6380 — системные 5432/6379 заняты). Коммиты `e33fc7a` `685eb00` `e3576d9` `8a2d65a`.
 - [ ] S2-02 Sakshi Log в БД: append-only, HMAC-цепочка `hash_n = HMAC(audit_key, prev_hash ‖ canonical(payload))`, экспорт
 - [ ] S2-03 WebSocket `/ws`: decision.proposed, approval.requested, tx.submitted, tx.confirmed, agent.status, provider.degraded
 - [ ] S2-04 Redis: решение по use-case (кэш цен/WS pub-sub/rate-limit) или удаление из compose/docs
@@ -137,6 +137,7 @@ F1 Gasless ERC-4337 · F2 Digital twin · F3 Copilot · F4 Intent-engine · F5 �
 | 09 | 2026-09-18 | S1-08 Kill-switch drill | `82f7826` | 70/70 passed | soft/hard, терминальный, блок во всех путях |
 | 10 | 2026-09-18 | S1-03 JWT: ротация refresh, reuse-detection, revoke-all, rate-limit | `b5c81f5` | 84/84 passed | tokens.py + ratelimit.py; RefreshStore in-memory (PG → S2) |
 | 11 | 2026-09-18 | S1-07 Контракты: починена компиляция (4 бага), 56 контрактных тестов, CI Slither+Aderyn | `0746648` `cf2773f` `2881461` | 56 passing | до этого дня контракты не компилировались |
+| 12 | 2026-09-18 | S2-01 PostgreSQL+Alembic+repositories, API на БД | `e33fc7a`..`8a2d65a` | 87/87 backend + PG smoke | 14 таблиц; dev-PG docker на 5433; «рестарт» не теряет данные |
 
 ## 💡 ИДЕИ НА ОБСУЖДЕНИЕ (новое — предлагать после отчётов)
 
