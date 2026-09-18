@@ -9,3 +9,4 @@ freelance/
 # Hardhat artifacts
 smart-contracts/artifacts/
 smart-contracts/cache/
+.env.migrated-*
