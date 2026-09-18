@@ -79,7 +79,7 @@
 
 ### P2 — Честный фундамент
 - [x] S2-01 PostgreSQL: 14 таблиц (SPEC §6.1) в `backend/src/db/models.py` (кросс-диалектные UUID/JSON: PG-JSONB ↔ SQLite), async engine/session + `session_scope()` (`db/database.py`), репозитории User/Agent/Transaction (`db/repositories.py`), Alembic (async env, миграция `17e2466e8f71` применена на живой PG). API переведён с in-memory dict'ов на репозитории (users/agents/transactions; health считает running из БД). Тесты: **3 персистентности** («рестарт» = reset_engine → данные живы) на SQLite + смоук на реальном PG (register→login→create→list, строки в таблицах подтверждены psql). Dev-PG: docker-контейнер `karta-postgres` (порт **5433**, agent/agent, volume `karta_pgdata`); compose-порты выровнены (PG 5433, Redis 6380 — системные 5432/6379 заняты). Коммиты `e33fc7a` `685eb00` `e3576d9` `8a2d65a`.
-- [ ] S2-02 Sakshi Log в БД: append-only, HMAC-цепочка `hash_n = HMAC(audit_key, prev_hash ‖ canonical(payload))`, экспорт
+- [x] S2-02 Sakshi Log + Decision Diary: `security/sakshi.py` (HMAC-цепочка `hash_n = HMAC-SHA256(audit_key, prev_hash‖canonical(payload))`, `verify_chain` ловит подмену), `DecisionRepository` (тезис ДО: action/reasoning/confidence/risk/policy_verdict), интеграция в core (`_persist_decision`, `_sakshi_append` в `_tick` и у policy-вердиктов; активируется при `db_agent_id`+`sakshi`), экспорт-CLI `scripts/karta_audit_export.py --format json|csv`, PG-триггер append-only (миграция `0002`, проверен тестом: UPDATE заблокирован). 7 тестов, включая PG-триггер и tamper-detection. Коммит `6395865`. Долг: запись kill-switch/step-событий из sync-контекста — при подключении runtime к API (S2-03+).
 - [ ] S2-03 WebSocket `/ws`: decision.proposed, approval.requested, tx.submitted, tx.confirmed, agent.status, provider.degraded
 - [ ] S2-04 Redis: решение по use-case (кэш цен/WS pub-sub/rate-limit) или удаление из compose/docs
 - [ ] S2-05 LLMProvider + LLMRouter + structured output (pydantic `AgentDecision`) + circuit breaker
@@ -138,6 +138,7 @@ F1 Gasless ERC-4337 · F2 Digital twin · F3 Copilot · F4 Intent-engine · F5 �
 | 11 | 2026-09-18 | S1-07 Контракты: починена компиляция (4 бага), 56 контрактных тестов, CI Slither+Aderyn | `0746648` `cf2773f` `2881461` | 56 passing | до этого дня контракты не компилировались |
 | 12 | 2026-09-18 | S2-01 PostgreSQL+Alembic+repositories, API на БД | `e33fc7a`..`8a2d65a` | 87/87 backend + PG smoke | 14 таблиц; dev-PG docker на 5433; «рестарт» не теряет данные |
 | 13 | 2026-09-18 | S1-01 секреты: вывод backend/.env из контура + gitleaks CI | `b077612` | 87/87 | **P1 закрыта 9/9**; Mistral-ключи списаны владельцем |
+| 14 | 2026-09-18 | S2-02 Sakshi Log: HMAC-аудит + Decision Diary + export + PG-триггер | `6395865` | 94/94 (вкл. PG-триггер) | запись активируется через `db_agent_id`+`sakshi` |
 
 ## 💡 ИДЕИ НА ОБСУЖДЕНИЕ (новое — предлагать после отчётов)
 
