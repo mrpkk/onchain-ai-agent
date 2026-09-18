@@ -31,8 +31,7 @@
 
 ## 🧭 ТЕКУЩИЙ ШАГ (обновлять при каждом слайсе)
 
-**Статус:** P0 закрыт 100%; **P1 «Безопасность» — 8/9 слайсов закрыто** (S1-02 · S1-04 · S1-05 · S1-06 · S1-08 · S1-09 · S1-03 · S1-07). Тесты: **140 зелёных** (backend 84 + контракты 56). Раннеры: `backend/.venv/bin/python -m pytest` и `npx hardhat test` (smart-contracts).
-**Ждёт владельца:** S1-01 — перенос `backend/.env` → `~/.env` (chmod 600). По команде «да» — финальный слайс и P1 закрыта полностью.
+**Статус:** P0 закрыт 100%; **P1 «Безопасность» — ЗАКРЫТА 9/9** (S1-01 секреты+CI · S1-02 Argon2id · S1-03 JWT · S1-04 KeyVault · S1-05 approve · S1-06 Dharma · S1-07 контракты+CI · S1-08 kill-drill · S1-09 health) (S1-02 · S1-04 · S1-05 · S1-06 · S1-08 · S1-09 · S1-03 · S1-07). Тесты: **140 зелёных** (backend 84 + контракты 56). Раннеры: `backend/.venv/bin/python -m pytest` и `npx hardhat test` (smart-contracts).
 **Следом (P2, по команде):** S2-01 ✅ → далее S2-02 Sakshi Log (HMAC-цепочка, запись каждого решения в `audit_events`), S2-03 WS-события, S2-05 LLMProvider+structured output, S2-07 Mempool real/NOT_IMPLEMENTED, S2-08 README=код. Плюс долг: RefreshStore → таблица `refresh_tokens` (сейчас in-memory), decision-diary запись в `decisions` (таблица готова).
 **Открытые STOP-GATE (6):** (1) execution-граница v2 = READ+SIMULATE+PROPOSE? (2) PG локально через docker-compose? (3) DeepSeek-ключ в `~/.env`? (4) перенос `backend/.env` → `~/.env` chmod 600? (5) футуристики F3→F2→F1→F8→F5? (6) фронтенд A (server-rendered, рекомендован) или B (React SPA)?
 
@@ -68,7 +67,7 @@
 - [x] Брендинг-концепты: `branding/karta-chakra.svg`, `karta-monogram.svg`, `karta-shield.svg` — `dbf5de4`
 
 ### P1 — Безопасность (цель 1–2 нед; каждый слайс — по команде)
-- [ ] S1-01 Секреты: `backend/.env` → `~/.env` (chmod 600), CI secret-scan (gitleaks + entropy)
+- [x] S1-01 Секреты: `backend/.env` выведен из контура (переименован в `.env.migrated-20260918`, chmod 600; в git не попадает — паттерн `.env.migrated-*`). Владелец: Mistral-ключи без ценности (заблокирован в РФ) — не переносим; цепочка LLM: GigaChat → запасные → OpenCode Zen (крайний случай). Смоук из `backend/` без .env: `db: ok`, `llm: gigachat`, register 201. CI: gitleaks + grep-скан приватников. Коммит `b077612`.
 - [x] S1-02 Argon2id (passlib) + миграция legacy sha256 при логине + 8 тестов — `c0a6c97`
 - [x] S1-03 JWT-пара: `security/tokens.py` (access 15м + refresh 7д, type-claim, jti, family_id), ротация на каждом refresh, reuse-detection → отзыв всей семьи, эндпоинты `/auth/refresh` · `/auth/logout` · `/auth/revoke-all`, rate-limit логина 5/мин/IP (`api/ratelimit.py`), 14 тестов (unit+API) — `b5c81f5`. RefreshStore пока in-memory — PG-персистентность в S2-01.
 - [x] S1-04 KeyVault-миграция: lazy `_ensure_wallet()`, guard-тест + поведенческие тесты (executor retry при RPC) — `7d24267`
@@ -138,6 +137,7 @@ F1 Gasless ERC-4337 · F2 Digital twin · F3 Copilot · F4 Intent-engine · F5 �
 | 10 | 2026-09-18 | S1-03 JWT: ротация refresh, reuse-detection, revoke-all, rate-limit | `b5c81f5` | 84/84 passed | tokens.py + ratelimit.py; RefreshStore in-memory (PG → S2) |
 | 11 | 2026-09-18 | S1-07 Контракты: починена компиляция (4 бага), 56 контрактных тестов, CI Slither+Aderyn | `0746648` `cf2773f` `2881461` | 56 passing | до этого дня контракты не компилировались |
 | 12 | 2026-09-18 | S2-01 PostgreSQL+Alembic+repositories, API на БД | `e33fc7a`..`8a2d65a` | 87/87 backend + PG smoke | 14 таблиц; dev-PG docker на 5433; «рестарт» не теряет данные |
+| 13 | 2026-09-18 | S1-01 секреты: вывод backend/.env из контура + gitleaks CI | `b077612` | 87/87 | **P1 закрыта 9/9**; Mistral-ключи списаны владельцем |
 
 ## 💡 ИДЕИ НА ОБСУЖДЕНИЕ (новое — предлагать после отчётов)
 
