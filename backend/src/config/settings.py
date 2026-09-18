@@ -30,8 +30,8 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 15
     jwt_refresh_token_expire_days: int = 7
 
-    # Database (PostgreSQL async)
-    database_url: str = "postgresql+asyncpg://agent:agent@localhost:5432/onchain_ai"
+    # Database (PostgreSQL async; локальный docker PG — порт 5433)
+    database_url: str = "postgresql+asyncpg://agent:agent@127.0.0.1:5433/onchain_ai"
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
