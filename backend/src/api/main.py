@@ -31,6 +31,7 @@ from .models import (
     UserOut,
 )
 from ..config.settings import get_settings, validate_security
+from ..db import AgentRepository, TransactionRepository, UserRepository, create_all, session_scope
 from ..security.passwords import hash_password, verify_and_upgrade
 from ..security.tokens import (
     ACCESS,
@@ -65,15 +66,22 @@ app_start_time = time.time()
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 
-# ── In-memory stores (swap for real DB in production) ──────────────────
+# ── Storage: PostgreSQL через репозитории (SPEC S2-01) ─────────────────
 
-_users_db: dict[str, dict] = {}
-_agents_db: dict[str, dict] = {}
-_transactions_db: dict[str, list[dict]] = {}
 
 # ── App ────────────────────────────────────────────────────────────────
 
+from contextlib import asynccontextmanager as _asynccontextmanager
+
+
+@_asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    await create_all()  # dev-convenience; в прод-контуре схема ведётся Alembic
+    yield
+
+
 app = FastAPI(
+    lifespan=_lifespan,
     title=settings.app_name,
     description=(
         "🤖 **OnChain AI Agent** — платформа для создания и управления "
@@ -137,25 +145,24 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> dic
         username: str | None = payload.get("sub")
     except TokenError:
         raise credentials_exc
-    user = _users_db.get(username)
+    async with session_scope() as session:
+        user = await UserRepository(session).get_by_username(username)
     if user is None:
         raise credentials_exc
-    return user
+    return {"id": str(user.id), "username": user.username}
 
 
 # ── Auth endpoints ─────────────────────────────────────────────────────
 
 @app.post("/api/v1/auth/register", response_model=UserOut, status_code=201)
 async def register(body: UserCreate):
-    if body.username in _users_db:
-        raise HTTPException(status_code=409, detail="Username already taken")
-    user_id = str(uuid.uuid4())
-    _users_db[body.username] = {
-        "id": user_id,
-        "username": body.username,
-        "hashed_password": hash_password(body.password),
-    }
-    return UserOut(id=user_id, username=body.username)
+    async with session_scope() as session:
+        users = UserRepository(session)
+        if await users.get_by_username(body.username) is not None:
+            raise HTTPException(status_code=409, detail="Username already taken")
+        user = await users.create(body.username, hash_password(body.password))
+        user_id, username = user.id, user.username
+    return UserOut(id=str(user_id), username=username)
 
 
 @app.post("/api/v1/auth/token", response_model=TokenResponse)
@@ -163,15 +170,18 @@ async def login(body: TokenRequest, request: Request):
     client = request.client.host if request.client else "unknown"
     if not _login_limiter.allow(client):
         raise HTTPException(status_code=429, detail="Too many login attempts, try later")
-    user = _users_db.get(body.username)
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    ok, upgraded = verify_and_upgrade(body.password, user["hashed_password"])
-    if not ok:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    if upgraded:
-        user["hashed_password"] = upgraded  # миграция legacy → Argon2id
-    pair, _ = _issue_token_pair(user["username"])
+    async with session_scope() as session:
+        users = UserRepository(session)
+        user = await users.get_by_username(body.username)
+        if user is None:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        ok, upgraded = verify_and_upgrade(body.password, user.password_hash)
+        if not ok:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        if upgraded:
+            await users.update_password_hash(user, upgraded)  # миграция legacy → Argon2id
+        username = user.username
+    pair, _ = _issue_token_pair(username)
     return pair
 
 
@@ -193,7 +203,9 @@ async def refresh_tokens(body: RefreshRequest):
             "REFRESH REUSE detected user=%s family=%s — family revoked",
             record.sub, record.family_id)
         raise HTTPException(status_code=401, detail="Refresh token reuse detected; sessions revoked")
-    if record.sub not in _users_db:
+    async with session_scope() as session:
+        user = await UserRepository(session).get_by_username(record.sub)
+    if user is None:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
     pair, new_jti = _issue_token_pair(record.sub, family_id=record.family_id)
     _refresh_store.rotate(record.jti, new_jti)
@@ -210,30 +222,73 @@ async def revoke_all_tokens(current_user: Annotated[dict, Depends(get_current_us
 
 # ── Agent CRUD ─────────────────────────────────────────────────────────
 
+def _agent_to_response(agent) -> AgentResponse:
+    return AgentResponse(
+        id=str(agent.id),
+        name=agent.name,
+        description=agent.description or "",
+        strategy=agent.strategy,
+        status=AgentStatus(agent.status),
+        chain_id=agent.chain_id,
+        wallet_address=agent.wallet_address,
+        config=agent.config or {},
+        goal=agent.goal_text,
+        created_at=agent.created_at,
+        updated_at=agent.updated_at,
+    )
+
+
+def _tx_to_response(tx) -> TransactionResponse:
+    params = tx.params or {}
+    try:
+        status_value = TransactionStatus(tx.status)
+    except ValueError:
+        status_value = TransactionStatus.PENDING
+    return TransactionResponse(
+        id=str(tx.id),
+        agent_id=str(tx.agent_id),
+        tx_hash=tx.tx_hash,
+        chain_id=tx.chain_id,
+        from_address="",
+        to_address=str(params.get("to", "")),
+        value=str(params.get("amount", "0")),
+        gas_used=tx.gas_used,
+        status=status_value,
+        block_number=None,
+        timestamp=tx.created_at,
+        metadata={"action": tx.action},
+    )
+
+
+async def _get_owned_agent(session, agent_id: str, current_user: dict):
+    try:
+        agent_uuid = uuid.UUID(agent_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    agent = await AgentRepository(session).get(agent_uuid)
+    if agent is None or str(agent.owner_id) != current_user["id"]:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return agent
+
+
 @app.post("/api/v1/agents", response_model=AgentResponse, status_code=201)
 async def create_agent(
     body: AgentCreate,
     current_user: Annotated[dict, Depends(get_current_user)],
 ):
-    agent_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc)
-    agent = {
-        "id": agent_id,
-        "name": body.name,
-        "description": body.description,
-        "strategy": body.strategy,
-        "status": AgentStatus.CREATED,
-        "chain_id": body.chain_id,
-        "wallet_address": body.wallet_address,
-        "config": body.config,
-        "goal": None,
-        "created_by": current_user["id"],
-        "created_at": now,
-        "updated_at": now,
-    }
-    _agents_db[agent_id] = agent
-    _transactions_db[agent_id] = []
-    return AgentResponse(**{k: v for k, v in agent.items() if k != "created_by"})
+    async with session_scope() as session:
+        agent = await AgentRepository(session).create(
+            owner_id=uuid.UUID(current_user["id"]),
+            name=body.name,
+            description=body.description,
+            strategy=body.strategy,
+            chain_id=body.chain_id,
+            wallet_address=body.wallet_address,
+            config=body.config,
+            status=AgentStatus.CREATED.value,
+        )
+        response = _agent_to_response(agent)
+    return response
 
 
 @app.get("/api/v1/agents", response_model=AgentListResponse)
@@ -242,15 +297,13 @@ async def list_agents(
     offset: int = 0,
     limit: int = 50,
 ):
-    user_agents = [a for a in _agents_db.values() if a["created_by"] == current_user["id"]]
-    sliced = user_agents[offset : offset + limit]
-    return AgentListResponse(
-        agents=[
-            AgentResponse(**{k: v for k, v in a.items() if k != "created_by"})
-            for a in sliced
-        ],
-        total=len(user_agents),
-    )
+    async with session_scope() as session:
+        repo = AgentRepository(session)
+        owner = uuid.UUID(current_user["id"])
+        agents = await repo.list_by_owner(owner, offset=offset, limit=limit)
+        total = await repo.count_by_owner(owner)
+        items = [_agent_to_response(a) for a in agents]
+    return AgentListResponse(agents=items, total=total)
 
 
 @app.get("/api/v1/agents/{agent_id}", response_model=AgentResponse)
@@ -258,10 +311,10 @@ async def get_agent(
     agent_id: str,
     current_user: Annotated[dict, Depends(get_current_user)],
 ):
-    agent = _agents_db.get(agent_id)
-    if not agent or agent["created_by"] != current_user["id"]:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    return AgentResponse(**{k: v for k, v in agent.items() if k != "created_by"})
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+        response = _agent_to_response(agent)
+    return response
 
 
 @app.post("/api/v1/agents/{agent_id}/start", response_model=AgentResponse)
@@ -269,16 +322,15 @@ async def start_agent(
     agent_id: str,
     current_user: Annotated[dict, Depends(get_current_user)],
 ):
-    agent = _agents_db.get(agent_id)
-    if not agent or agent["created_by"] != current_user["id"]:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    if agent["status"] == AgentStatus.RUNNING:
-        raise HTTPException(status_code=409, detail="Agent is already running")
-    if agent["status"] == AgentStatus.KILLED:
-        raise HTTPException(status_code=409, detail="Agent has been killed")
-    agent["status"] = AgentStatus.RUNNING
-    agent["updated_at"] = datetime.now(timezone.utc)
-    return AgentResponse(**{k: v for k, v in agent.items() if k != "created_by"})
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+        if agent.status == AgentStatus.RUNNING.value:
+            raise HTTPException(status_code=409, detail="Agent is already running")
+        if agent.status == AgentStatus.KILLED.value:
+            raise HTTPException(status_code=409, detail="Agent has been killed")
+        await AgentRepository(session).set_status(agent, AgentStatus.RUNNING.value)
+        response = _agent_to_response(agent)
+    return response
 
 
 @app.post("/api/v1/agents/{agent_id}/stop", response_model=AgentResponse)
@@ -286,14 +338,13 @@ async def stop_agent(
     agent_id: str,
     current_user: Annotated[dict, Depends(get_current_user)],
 ):
-    agent = _agents_db.get(agent_id)
-    if not agent or agent["created_by"] != current_user["id"]:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    if agent["status"] != AgentStatus.RUNNING:
-        raise HTTPException(status_code=409, detail="Agent is not running")
-    agent["status"] = AgentStatus.STOPPED
-    agent["updated_at"] = datetime.now(timezone.utc)
-    return AgentResponse(**{k: v for k, v in agent.items() if k != "created_by"})
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+        if agent.status != AgentStatus.RUNNING.value:
+            raise HTTPException(status_code=409, detail="Agent is not running")
+        await AgentRepository(session).set_status(agent, AgentStatus.STOPPED.value)
+        response = _agent_to_response(agent)
+    return response
 
 
 @app.post("/api/v1/agents/{agent_id}/goal", response_model=AgentResponse)
@@ -302,13 +353,11 @@ async def set_goal(
     body: GoalRequest,
     current_user: Annotated[dict, Depends(get_current_user)],
 ):
-    agent = _agents_db.get(agent_id)
-    if not agent or agent["created_by"] != current_user["id"]:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    agent["goal"] = body.goal
-    agent["goal_context"] = body.context
-    agent["updated_at"] = datetime.now(timezone.utc)
-    return AgentResponse(**{k: v for k, v in agent.items() if k != "created_by"})
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+        await AgentRepository(session).set_goal(agent, body.goal, body.context)
+        response = _agent_to_response(agent)
+    return response
 
 
 @app.post("/api/v1/agents/{agent_id}/kill-switch", response_model=AgentResponse)
@@ -317,13 +366,12 @@ async def kill_switch(
     body: KillSwitchRequest,
     current_user: Annotated[dict, Depends(get_current_user)],
 ):
-    agent = _agents_db.get(agent_id)
-    if not agent or agent["created_by"] != current_user["id"]:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    agent["status"] = AgentStatus.KILLED
-    agent["config"]["kill_reason"] = body.reason
-    agent["updated_at"] = datetime.now(timezone.utc)
-    return AgentResponse(**{k: v for k, v in agent.items() if k != "created_by"})
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+        agent.config = {**(agent.config or {}), "kill_reason": body.reason}
+        await AgentRepository(session).set_status(agent, AgentStatus.KILLED.value)
+        response = _agent_to_response(agent)
+    return response
 
 
 # ── Transactions ───────────────────────────────────────────────────────
@@ -335,22 +383,21 @@ async def list_transactions(
     offset: int = 0,
     limit: int = 50,
 ):
-    agent = _agents_db.get(agent_id)
-    if not agent or agent["created_by"] != current_user["id"]:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    txs = _transactions_db.get(agent_id, [])
-    sliced = txs[offset : offset + limit]
-    return TransactionListResponse(
-        transactions=[TransactionResponse(**tx) for tx in sliced],
-        total=len(txs),
-    )
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+        repo = TransactionRepository(session)
+        txs = await repo.list_for_agent(agent.id, offset=offset, limit=limit)
+        total = await repo.count_for_agent(agent.id)
+        items = [_tx_to_response(tx) for tx in txs]
+    return TransactionListResponse(transactions=items, total=total)
 
 
 # ── Health ─────────────────────────────────────────────────────────────
 
 @app.get("/api/v1/health", response_model=HealthResponse)
 async def health():
-    active = sum(1 for a in _agents_db.values() if a["status"] == AgentStatus.RUNNING)
+    async with session_scope() as session:
+        active = await AgentRepository(session).count_running()
     real = await collect_health(settings, app_start_time)
     return HealthResponse(
         status=real["status"],
