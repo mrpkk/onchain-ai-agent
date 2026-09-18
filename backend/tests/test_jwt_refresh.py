@@ -98,13 +98,18 @@ def test_limiter_allows_up_to_max():
 
 @pytest.fixture
 def client():
-    from src.api import main as main_module
+    import asyncio
 
-    main_module._users_db.clear()
-    main_module._agents_db.clear()
+    from src.api import main as main_module
+    from src.db import database
+
+    database.reset_engine()
+    asyncio.run(database.drop_all())
+    asyncio.run(database.create_all())
     main_module._refresh_store = RefreshStore()
     main_module._login_limiter = SlidingWindowLimiter(max_attempts=5, window_sec=60)
-    return TestClient(main_module.app)
+    with TestClient(main_module.app) as test_client:
+        yield test_client
 
 
 def _register_and_login(client, username="alice", password="pass12345") -> dict:
