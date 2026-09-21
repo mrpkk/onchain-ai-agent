@@ -21,7 +21,7 @@ from .execution import (
     WalletManager, TransactionExecutor, SpendingLimit,
     TransactionResult, TxStatus,
 )
-from ..db import DecisionRepository, session_scope
+from ..db import ApprovalRepository, DecisionRepository, session_scope
 from ..security.keyvault import KeyVault
 from ..security.sakshi import SakshiLog
 from .simulation import SimulationReceipt, SimulationService
@@ -99,7 +99,8 @@ class OnChainAgent:
                  db_agent_id: Optional[uuid.UUID] = None,
                  sakshi: Optional[SakshiLog] = None,
                  event_sink: Optional[Callable[[dict], Awaitable[None]]] = None,
-                 simulator: Optional[SimulationService] = None):
+                 simulator: Optional[SimulationService] = None,
+                 notifier: Optional[Callable[[Optional[str], dict], Awaitable[None]]] = None):
         self.config = config
         self.agent_id = f"agent_{config.name.lower().replace(' ', '_')}"
 
@@ -130,6 +131,7 @@ class OnChainAgent:
         self._db_agent_id = db_agent_id
         self._sakshi = sakshi
         self._event_sink = event_sink
+        self._notifier = notifier
         self.simulator = simulator or SimulationService()
         self.timelock = TimelockQueue()
 
@@ -391,8 +393,11 @@ class OnChainAgent:
         except Exception as e:
             logger.error("Sakshi: не удалось записать событие %s: %s", event_type, e)
 
-    async def _persist_decision(self, decision: AgentDecision, verdict=None) -> None:
-        """Decision Diary: событие в WS + запись решения агента (тезис ДО) в decisions."""
+    async def _persist_decision(self, decision: AgentDecision, verdict=None) -> Optional[str]:
+        """Decision Diary: событие в WS + запись решения в decisions.
+
+        Returns: str(id записи) или None (нет БД-агента/ошибка).
+        """
         await self._emit({
             "type": "decision.proposed",
             "agent_id": str(self._db_agent_id) if self._db_agent_id else self.agent_id,
@@ -401,10 +406,10 @@ class OnChainAgent:
             "risk_level": decision.risk_level,
         })
         if self._db_agent_id is None:
-            return
+            return None
         try:
             async with session_scope() as session:
-                await DecisionRepository(session).add(
+                row = await DecisionRepository(session).add(
                     self._db_agent_id,
                     action=decision.action,
                     params=decision.params,
@@ -414,8 +419,51 @@ class OnChainAgent:
                     policy_verdict=verdict.to_dict() if verdict is not None else None,
                     requires_approval=decision.requires_approval,
                 )
+                return str(row.id)
         except Exception as e:
             logger.error("Decision diary: не удалось записать решение: %s", e)
+            return None
+
+    async def _raise_approval(self, decision_row_id: Optional[str],
+                              decision: AgentDecision) -> None:
+        """Создаёт approval-заявку, уведомляет (WS + Telegram) — S4-06."""
+        approval_id: Optional[str] = None
+        if self._db_agent_id is not None:
+            try:
+                async with session_scope() as session:
+                    row = await ApprovalRepository(session).create(
+                        uuid.UUID(decision_row_id) if decision_row_id else None,
+                        channel="web", ttl_minutes=30,
+                    )
+                    approval_id = str(row.id)
+            except Exception as e:
+                logger.error("Approval: не удалось создать заявку: %s", e)
+
+        self.state.status = "awaiting_approval"
+        self._log_audit("approval_requested", {
+            "approval_id": approval_id, "action": decision.action,
+        })
+        await self._sakshi_append("approval_requested", {
+            "approval_id": approval_id, "action": decision.action,
+            "params": decision.params,
+        })
+        await self._emit({
+            "type": "approval.requested",
+            "agent_id": str(self._db_agent_id) if self._db_agent_id else self.agent_id,
+            "approval_id": approval_id,
+            "action": decision.action,
+            "risk_level": decision.risk_level,
+        })
+        if self._notifier is not None:
+            try:
+                await self._notifier(approval_id, {
+                    "agent": self.config.name,
+                    "action": decision.action,
+                    "params": decision.params,
+                    "reasoning": decision.reasoning or "",
+                })
+            except Exception as e:
+                logger.warning("Approval notifier error: %s", e)
 
     async def start(self):
         self._running = True
@@ -486,7 +534,7 @@ class OnChainAgent:
             self.state.daily_spend,
         )
 
-        await self._persist_decision(decision)
+        decision_row_id = await self._persist_decision(decision)
         await self._sakshi_append("decision_made", {
             "action": decision.action,
             "confidence": decision.confidence,
@@ -502,16 +550,11 @@ class OnChainAgent:
         })
 
         if decision.action == "ask_human":
-            self.state.status = "awaiting_approval"
-            self._log_audit("awaiting_approval", decision.params)
+            await self._raise_approval(decision_row_id, decision)
             return
 
         if decision.requires_approval and not self.config.auto_execute:
-            self.state.status = "awaiting_approval"
-            self._log_audit("requires_approval", {
-                "action": decision.action,
-                "params": decision.params,
-            })
+            await self._raise_approval(decision_row_id, decision)
             return
 
         if self.config.simulation_mode:

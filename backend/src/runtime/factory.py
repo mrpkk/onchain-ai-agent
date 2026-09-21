@@ -25,7 +25,8 @@ CHAIN_NAMES = {1: "ethereum", 56: "bsc", 137: "polygon", 11155111: "sepolia"}
 
 async def build_agent(agent_row, *, event_sink=None,
                       vault: Optional[KeyVault] = None,
-                      sakshi: Optional[SakshiLog] = None) -> OnChainAgent:
+                      sakshi: Optional[SakshiLog] = None,
+                      notifier=None) -> OnChainAgent:
     """Собирает OnChainAgent для записи агента из БД."""
     async with session_scope() as session:
         policy_row = await PolicyRepository(session).get_active(agent_row.id)
@@ -51,6 +52,14 @@ async def build_agent(agent_row, *, event_sink=None,
             logger.warning("Runtime: Sakshi недоступен (%s) — аудит только в память", e)
             sakshi = None
 
+    if notifier is None:
+        try:
+            from ..integrations.telegram import notifier_from_env
+            notifier = notifier_from_env()
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Runtime: Telegram notifier недоступен (%s)", e)
+            notifier = None
+
     config = AgentConfig(
         name=agent_row.name,
         chain=CHAIN_NAMES.get(agent_row.chain_id, "ethereum"),
@@ -63,4 +72,5 @@ async def build_agent(agent_row, *, event_sink=None,
         db_agent_id=agent_row.id,
         sakshi=sakshi,
         event_sink=event_sink,
+        notifier=notifier.send_approval if notifier is not None else None,
     )

@@ -164,6 +164,10 @@ function handleWsEvent(data) {
     toast("Решение: " + data.action + " (уверенность " + Math.round((data.confidence || 0) * 100) + "%)", "info");
     return;
   }
+  if (data.type === "approval.requested") {
+    toast("Требуется подтверждение: " + (data.action || "действие"), "error");
+    return;
+  }
   if (data.type === "action.scheduled") {
     if (SELECTED && data.agent_id === SELECTED) refreshPending();
     toast("Действие отложено (окно undo)", "info");

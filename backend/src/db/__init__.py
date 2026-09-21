@@ -18,12 +18,13 @@ from .models import (
     User,
     Wallet,
 )
-from .repositories import (AgentRepository, DecisionRepository, PolicyRepository,
-                           TransactionRepository, UserRepository)
+from .repositories import (AgentRepository, ApprovalRepository, DecisionRepository,
+                           PolicyRepository, TransactionRepository, UserRepository)
 
 __all__ = [
     "Agent",
     "AgentRepository",
+    "ApprovalRepository",
     "ApiKey",
     "Approval",
     "AuditEvent",

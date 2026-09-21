@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from pathlib import Path
 
 import logging
@@ -21,6 +23,8 @@ from .models import (
     AgentResponse,
     AgentStatus,
     AgentUpdate,
+    ApprovalListResponse,
+    ApprovalResponse,
     GoalRequest,
     HealthResponse,
     IntentConfirmRequest,
@@ -48,9 +52,10 @@ from .models import (
     UserOut,
 )
 from ..config.settings import get_settings, validate_security
-from ..db import (AgentRepository, DecisionRepository, PolicyRepository,
+from ..db import (AgentRepository, ApprovalRepository, DecisionRepository, PolicyRepository,
                   TransactionRepository, UserRepository, create_all, session_scope)
 from ..runtime import TIER_POLICY_TEMPLATES, build_agent
+from ..runtime.approvals import resolve_approval
 from ..runtime import manager as runtime_manager
 from ..security.dharma import PolicyError, TxContext, build_default_policy, compile_yaml, evaluate
 from ..agent.intent import parse_intent
@@ -104,7 +109,22 @@ from contextlib import asynccontextmanager as _asynccontextmanager
 @_asynccontextmanager
 async def _lifespan(_app: FastAPI):
     await create_all()  # dev-convenience; в прод-контуре схема ведётся Alembic
+    telegram_task = None
+    stop_event = asyncio.Event()
+    try:
+        from ..integrations.telegram import notifier_from_env
+        from ..integrations.telegram_poller import poll_loop
+
+        notifier = notifier_from_env()
+        if notifier is not None:
+            telegram_task = asyncio.create_task(poll_loop(notifier, stop_event))
+            logging.getLogger("uvicorn.error").info("Telegram poller запущен")
+    except Exception as e:  # noqa: BLE001 — не роняем старт из-за интеграции
+        logging.getLogger("uvicorn.error").warning("Telegram poller не запущен: %s", e)
     yield
+    if telegram_task is not None:
+        stop_event.set()
+        telegram_task.cancel()
 
 
 app = FastAPI(
@@ -460,6 +480,64 @@ async def list_transactions(
         total = await repo.count_for_agent(agent.id)
         items = [_tx_to_response(tx) for tx in txs]
     return TransactionListResponse(transactions=items, total=total)
+
+
+# ── Approvals: web + Telegram (S4-06) ──────────────────────────────────
+
+def _approval_to_response(approval, decision, agent) -> ApprovalResponse:
+    return ApprovalResponse(
+        id=str(approval.id),
+        decision_id=str(approval.decision_id) if approval.decision_id else None,
+        agent_id=str(agent.id) if agent else None,
+        agent_name=agent.name if agent else None,
+        action=decision.action if decision else None,
+        params=(decision.params or {}) if decision else {},
+        reasoning=decision.reasoning if decision else None,
+        status=approval.status,
+        channel=approval.channel,
+        ttl_until=approval.ttl_until,
+        created_at=approval.created_at,
+    )
+
+
+@app.get("/api/v1/approvals", response_model=ApprovalListResponse)
+async def list_approvals(
+    current_user: Annotated[dict, Depends(get_current_user)],
+    limit: int = 50,
+):
+    async with session_scope() as session:
+        rows = await ApprovalRepository(session).list_pending_with_decision(
+            uuid.UUID(current_user["id"]),
+        )
+        items = [_approval_to_response(a, d, ag) for a, d, ag in rows[:limit]]
+    return ApprovalListResponse(approvals=items, total=len(items))
+
+
+async def _resolve_approval_endpoint(approval_id: str, action: str, current_user: dict) -> dict:
+    owner = uuid.UUID(current_user["id"])
+    result = await resolve_approval(approval_id, action, actor_user_id=owner,
+                                    require_owner=owner)
+    if "error" in result:
+        detail = result["error"]
+        code = 409 if "already" in detail else 404 if "not found" in detail else 400
+        raise HTTPException(status_code=code, detail=detail)
+    return result
+
+
+@app.post("/api/v1/approvals/{approval_id}/approve")
+async def approve_approval(
+    approval_id: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    return await _resolve_approval_endpoint(approval_id, "approve", current_user)
+
+
+@app.post("/api/v1/approvals/{approval_id}/reject")
+async def reject_approval(
+    approval_id: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    return await _resolve_approval_endpoint(approval_id, "reject", current_user)
 
 
 # ── Chat-first intent (S4-03) ──────────────────────────────────────────

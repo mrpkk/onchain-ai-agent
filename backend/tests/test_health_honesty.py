@@ -50,6 +50,7 @@ def test_health_degraded_when_partial(monkeypatch):
 
 
 def test_health_ok_when_all_configured(monkeypatch):
+    monkeypatch.setenv("KARTA_TELEGRAM_BOT_TOKEN", "test-token")
     _patch_all(monkeypatch, "ok", "ok", "ok", llm="configured", vault="configured")
     result = _run(health_module.collect_health(_Settings(), 0.0))
     assert result["status"] == "ok"

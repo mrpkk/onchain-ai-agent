@@ -24,6 +24,7 @@ class RuntimeManager:
             return False
         self._runtimes[agent_id] = agent
         self._tasks[agent_id] = asyncio.create_task(agent.start())
+        await asyncio.sleep(0)  # даём задаче стартовать детерминированно
         logger.info("Runtime started: %s", agent_id)
         return True
 

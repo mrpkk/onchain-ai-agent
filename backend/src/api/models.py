@@ -223,3 +223,24 @@ class IntentConfirmResponse(BaseModel):
     tx_hash: Optional[str] = None
     error: Optional[str] = None
     detail: dict = Field(default_factory=dict)
+
+
+# ── Approvals (S4-06) ─────────────────────────────────────────────────
+
+class ApprovalResponse(BaseModel):
+    id: str
+    decision_id: Optional[str] = None
+    agent_id: Optional[str] = None
+    agent_name: Optional[str] = None
+    action: Optional[str] = None
+    params: dict = Field(default_factory=dict)
+    reasoning: Optional[str] = None
+    status: str = "pending"
+    channel: str = "web"
+    ttl_until: Optional[datetime] = None
+    created_at: datetime
+
+
+class ApprovalListResponse(BaseModel):
+    approvals: list[ApprovalResponse]
+    total: int

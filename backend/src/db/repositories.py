@@ -9,7 +9,7 @@ from typing import Optional, Sequence
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import Agent, Decision, Policy, Transaction, User
+from .models import Agent, Approval, Decision, Policy, Transaction, User
 
 
 def _utcnow() -> datetime:
@@ -155,6 +155,9 @@ class DecisionRepository:
         )
         return int(result.scalar_one())
 
+    async def get(self, decision_id: uuid.UUID) -> Optional[Decision]:
+        return await self.session.get(Decision, decision_id)
+
 
 class PolicyRepository:
     """Версионированные Dharma-политики агента (S3-01)."""
@@ -191,3 +194,50 @@ class PolicyRepository:
         self.session.add(policy)
         await self.session.flush()
         return policy
+
+
+class ApprovalRepository:
+    """Одобрения решений (web/telegram/api). Telegram не обходит policy (S4-06)."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create(self, decision_id: uuid.UUID | None = None, *,
+                     channel: str = "web", ttl_minutes: int = 30) -> Approval:
+        approval = Approval(
+            decision_id=decision_id,
+            channel=channel,
+            status="pending",
+            ttl_until=_utcnow().replace(microsecond=0) + __import__("datetime").timedelta(minutes=ttl_minutes),
+        )
+        self.session.add(approval)
+        await self.session.flush()
+        return approval
+
+    async def get(self, approval_id: uuid.UUID) -> Optional[Approval]:
+        return await self.session.get(Approval, approval_id)
+
+    async def list_pending_with_decision(self, owner_id: uuid.UUID):
+        """(Approval, Decision, Agent) для pending-одобрений агентов владельца."""
+        stmt = (
+            sa.select(Approval, Decision, Agent)
+            .join(Decision, Approval.decision_id == Decision.id)
+            .join(Agent, Decision.agent_id == Agent.id)
+            .where(Approval.status == "pending", Agent.owner_id == owner_id)
+            .order_by(Approval.created_at.desc())
+        )
+        result = await self.session.execute(stmt)
+        return result.all()
+
+    async def resolve(self, approval_id: uuid.UUID, status: str, *,
+                      decided_by: uuid.UUID | None = None,
+                      comment: str | None = None) -> Optional[Approval]:
+        approval = await self.session.get(Approval, approval_id)
+        if approval is None or approval.status != "pending":
+            return None
+        approval.status = status
+        approval.decided_by = decided_by
+        approval.comment = comment
+        approval.resolved_at = _utcnow()
+        await self.session.flush()
+        return approval

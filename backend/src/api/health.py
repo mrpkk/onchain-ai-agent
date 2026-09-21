@@ -81,6 +81,7 @@ async def collect_health(settings, started_at: float) -> dict:
         "rpc": rpc,
         "llm": _llm_status(),
         "keyvault": _keyvault_status(),
+        "telegram": "configured" if os.getenv("KARTA_TELEGRAM_BOT_TOKEN") else "not_configured",
     }
     states = [v if isinstance(v, str) else v["status"] for v in components.values()]
     if all(s in _OK_STATES for s in states):
