@@ -32,7 +32,7 @@
 ## 🧭 ТЕКУЩИЙ ШАГ (обновлять при каждом слайсе)
 
 **Статус:** P0 закрыт 100%; **P1 «Безопасность» — ЗАКРЫТА 9/9** (S1-01 секреты+CI · S1-02 Argon2id · S1-03 JWT · S1-04 KeyVault · S1-05 approve · S1-06 Dharma · S1-07 контракты+CI · S1-08 kill-drill · S1-09 health) (S1-02 · S1-04 · S1-05 · S1-06 · S1-08 · S1-09 · S1-03 · S1-07). Тесты: **140 зелёных** (backend 84 + контракты 56). Раннеры: `backend/.venv/bin/python -m pytest` и `npx hardhat test` (smart-contracts).
-**Следом (P2, по команде):** S2-01 ✅ → далее S2-02 Sakshi Log (HMAC-цепочка, запись каждого решения в `audit_events`), S2-03 WS-события, S2-05 LLMProvider+structured output, S2-07 Mempool real/NOT_IMPLEMENTED, S2-08 README=код. Плюс долг: RefreshStore → таблица `refresh_tokens` (сейчас in-memory), decision-diary запись в `decisions` (таблица готова).
+**Следом (P3, по команде):** S3-01 ✅ → S3-02 Simulation-гейт (eth_call + anvil когда доступен), S3-03 timelock/undo, S3-04 dead-man switch, S3-05 Guardian. **P2 закрыта 8/8.** Прежний план: S2-01 ✅ → далее S2-02 Sakshi Log (HMAC-цепочка, запись каждого решения в `audit_events`), S2-03 WS-события, S2-05 LLMProvider+structured output, S2-07 Mempool real/NOT_IMPLEMENTED, S2-08 README=код. Плюс долг: RefreshStore → таблица `refresh_tokens` (сейчас in-memory), decision-diary запись в `decisions` (таблица готова).
 **Открытые STOP-GATE (6):** (1) execution-граница v2 = READ+SIMULATE+PROPOSE? (2) PG локально через docker-compose? (3) DeepSeek-ключ в `~/.env`? (4) перенос `backend/.env` → `~/.env` chmod 600? (5) футуристики F3→F2→F1→F8→F5? (6) фронтенд A (server-rendered, рекомендован) или B (React SPA)?
 
 ---
@@ -88,7 +88,7 @@
 - [x] S2-08 README = код: честный ре-райт (18 маршрутов + WS сверены с приложением; статусы фич «работает/нет»; quickstart с PG 5433 + Alembic; env-таблица; тесты 116+56; архитектурная схема; дисклеймер). Коммит `ccafcd0`.
 
 ### P3 — Policy и Simulation
-- [ ] S3-01 Dharma DSL YAML + валидатор + вердикты в UI
+- [x] S3-01 Dharma-DSL в API: `PolicyRepository` (версии, одна активная; новая версия деактивирует прежнюю), эндпоинты **GET/PUT /api/v1/agents/{id}/policy** (валидация через `compile_yaml`, PolicyError→422, compiled-снимок в БД) и **POST /api/v1/policies/validate** ({valid, errors, window}); ownership-изоляция (чужой агент → 404). 6 тестов. Плюс тест-инфра-фикс: conftest сбрасывает `_login_limiter`/`_refresh_store` между тестами (иначе cumulative 429). Коммит `741a84d`. UI-редактор политик — в P4 (Кокпит).
 - [ ] S3-02 Simulation-гейт: `submit()` принимает только `SimulationReceipt(ok=True, ttl≤120с)`; anvil fork, diff, gas
 - [ ] S3-03 Timelock/undo-window для необратимых действий
 - [ ] S3-04 Dead man's switch (нет heartbeat N часов → hard kill)
@@ -144,6 +144,7 @@ F1 Gasless ERC-4337 · F2 Digital twin · F3 Copilot · F4 Intent-engine · F5 �
 | 17 | 2026-09-18 | S2-07 Mempool: реальный сканер + газ-тренд + честный rpc_unavailable | `24b83bd` | 116/116 | битый цикл заменён |
 | 18 | 2026-09-18 | S2-08 README=код (сверен с роутами приложения) | `ccafcd0` | 116/116 | P2 закрыта 7/8 (+S2-06 частично) |
 | 19 | 2026-09-18 | S2-06 Трейсинг llm_trace (request_id/agent_id/cost/prompt-version) | `83e5d88` | 122/122 | **P2 ЗАКРЫТА 8/8** |
+| 20 | 2026-09-18 | S3-01 Policy API: версии DSL, validate, ownership | `741a84d` | 128/128 | P3 открыта (1/5) |
 
 ## 💡 ИДЕИ НА ОБСУЖДЕНИЕ (новое — предлагать после отчётов)
 
