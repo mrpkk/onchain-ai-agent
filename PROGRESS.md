@@ -99,7 +99,7 @@
 - [x] S3-06 (интеграция, долги): **API⟷Runtime** — `runtime/factory.py` (сборка OnChainAgent из БД: активная политика DSL→CompiledPolicy, KeyVault, Sakshi, WS-sink, db_agent_id; нет политики→дефолт; нет vault/audit-ключа→честный режим без исполнения), `runtime/manager.py` (реестр running-агентов + asyncio-задачи). API: start→сборка+запуск, stop→остановка, kill-switch→hard kill runtime; новые эндпоинты **POST /heartbeat**, **GET /pending**, **POST /pending/{id}/cancel**, **GET /decisions** (Decision Diary из БД), **GET /audit** (Sakshi с hash-цепочкой). 9 тестов (fake-runtime + реальная фабрика с policy/дефолтом). Коммит `6fb6bd6`. Закрыты долги: heartbeat-API, cancel-API, decisions-API, audit-API, сборка из БД.
 
 ### P4 — Friendly-ядро + бренд (2–3 нед)
-- [ ] S4-01 Дизайн-система (токены SPEC §11, все состояния компонентов)
+- [x] S4-01 Дизайн-система + статика (вариант A): токены SPEC §11 (`static/tokens.css`: цвета/типографика/8pt/радиусы/motion/тени + light-тема), UI вынесен из main.py в `static/` (index.html, dashboard.css на токенах, dashboard.js, manifest.webmanifest — PWA); `main.py` 1111→~650 строк (FileResponse + StaticFiles); заголовок дашборда — KARTA. 4 теста (root/static/manifest/id-связность). Коммит `87ce4dd`.
 - [ ] S4-02 Кокпит (статус-бар/план-таймлайн/лента решений/спарклайны)
 - [ ] S4-03 Chat-first (NL → превью → подтверждение → квитанция)
 - [ ] S4-04 Onboarding ≤5 мин, тиры 0–3, demo-режим по умолчанию
