@@ -110,6 +110,9 @@
 - [ ] S4-09 KARTA-ассеты (после выбора лого владельцем)
 - [x] S4-10 Дифференциаторы (реализовано 2 ключевых): **Intent→Guarantee** — `agent/policy_intent.py` (NL-правило → pydantic-патч → merge с активной политикой → валидация Dharma → YAML-превью; применение ТОЛЬКО через явный PUT с новой версией) + API `POST /agents/{id}/policy/from-text` + панель «Правила (Dharma)» в кокпите; **Agent Health Score** — `runtime/health_score.py` (penalty из policy-отказов/провальных решений/доли провальных tx; band healthy/degraded/critical + рекомендация — совет, не автомат), встроен в reports/summary + строка «Здоровье» в UI. Остальные (Counterfactual/Drift/Ladder/Replay/Policy Simulator) — зафиксированы как кандидаты P7 (после появления исполнения данные станут полнее). 10 тестов. Коммит `061bee6`.
 
+- [x] S4-11 Policy Simulator: `runtime/policy_simulator.py` — прогон последних решений через текущую и кандидатную политики → изменения вердиктов (tightened/relaxed/unchanged) БЕЗ применения; API `POST /agents/{id}/policy/simulate` + кнопка «Симулировать» в панели правил (impact-превью до «Применить»). 4 теста.
+- [x] S4-12 Trust Ladder: `tiers.trust_ladder_rung()` (observe→suggest→simulate→approve→limited_auto→autonomous; консервативный маппинг tier+undo/approvals) → в `reports/summary.trust` + строка «Автономия» в UI. 2 теста. Коммит `5014142`.
+
 ### P5 — Исполнение 2.0
 - [ ] S5-01 Swap (1inch/агрегатор + slippage-guard) · S5-02 Bridge · S5-03 Deploy
 - [ ] S5-04 EIP-1559 + газ-оракул · S5-05 Private RPC (Flashbots-класс) + jitter
