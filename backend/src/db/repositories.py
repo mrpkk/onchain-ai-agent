@@ -9,7 +9,7 @@ from typing import Optional, Sequence
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import Agent, Decision, Transaction, User
+from .models import Agent, Decision, Policy, Transaction, User
 
 
 def _utcnow() -> datetime:
@@ -148,3 +148,40 @@ class DecisionRepository:
             .where(Decision.agent_id == agent_id)
         )
         return int(result.scalar_one())
+
+
+class PolicyRepository:
+    """Версионированные Dharma-политики агента (S3-01)."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get_active(self, agent_id: uuid.UUID) -> Optional[Policy]:
+        result = await self.session.execute(
+            sa.select(Policy).where(Policy.agent_id == agent_id, Policy.active.is_(True))
+            .order_by(Policy.version.desc()).limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def list_versions(self, agent_id: uuid.UUID) -> Sequence[Policy]:
+        result = await self.session.execute(
+            sa.select(Policy).where(Policy.agent_id == agent_id)
+            .order_by(Policy.version.desc())
+        )
+        return result.scalars().all()
+
+    async def create_version(self, agent_id: uuid.UUID, dsl_yaml: str,
+                             compiled: dict) -> Policy:
+        """Деактивирует прежнюю версию, создаёт новую (version+1)."""
+        await self.session.execute(
+            sa.update(Policy)
+            .where(Policy.agent_id == agent_id, Policy.active.is_(True))
+            .values(active=False)
+        )
+        versions = await self.list_versions(agent_id)
+        next_version = (versions[0].version + 1) if versions else 1
+        policy = Policy(agent_id=agent_id, version=next_version,
+                        dsl_yaml=dsl_yaml, compiled=compiled, active=True)
+        self.session.add(policy)
+        await self.session.flush()
+        return policy

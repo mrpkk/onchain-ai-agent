@@ -128,3 +128,27 @@ class HealthResponse(BaseModel):
     uptime: float
     agents_active: int
     components: dict
+
+
+# ── Policy (S3-01) ─────────────────────────────────────────────────────
+
+class PolicyPutRequest(BaseModel):
+    dsl_yaml: str = Field(..., min_length=1, max_length=20000)
+
+
+class PolicyValidateRequest(BaseModel):
+    dsl_yaml: str = Field(..., min_length=1, max_length=20000)
+
+
+class PolicyResponse(BaseModel):
+    agent_id: str
+    version: int
+    dsl_yaml: str
+    active: bool
+    compiled: dict = Field(default_factory=dict)
+
+
+class PolicyValidateResponse(BaseModel):
+    valid: bool
+    errors: list[str] = Field(default_factory=list)
+    window: Optional[list[int]] = None

@@ -21,6 +21,10 @@ from .models import (
     GoalRequest,
     HealthResponse,
     KillSwitchRequest,
+    PolicyPutRequest,
+    PolicyResponse,
+    PolicyValidateRequest,
+    PolicyValidateResponse,
     RefreshRequest,
     TokenRequest,
     TokenResponse,
@@ -31,7 +35,9 @@ from .models import (
     UserOut,
 )
 from ..config.settings import get_settings, validate_security
-from ..db import AgentRepository, TransactionRepository, UserRepository, create_all, session_scope
+from ..db import (AgentRepository, PolicyRepository, TransactionRepository,
+                  UserRepository, create_all, session_scope)
+from ..security.dharma import PolicyError, compile_yaml
 from ..security.passwords import hash_password, verify_and_upgrade
 from ..security.tokens import (
     ACCESS,
@@ -400,6 +406,72 @@ async def list_transactions(
         total = await repo.count_for_agent(agent.id)
         items = [_tx_to_response(tx) for tx in txs]
     return TransactionListResponse(transactions=items, total=total)
+
+
+# ── Policy (Dharma DSL, SPEC S3-01) ────────────────────────────────────
+
+def _compiled_to_dict(compiled) -> dict:
+    return {
+        "version": compiled.version,
+        "window": list(compiled.window) if compiled.window else None,
+        "model": compiled.model.model_dump(mode="json"),
+    }
+
+
+def _policy_to_response(policy) -> PolicyResponse:
+    return PolicyResponse(
+        agent_id=str(policy.agent_id),
+        version=policy.version,
+        dsl_yaml=policy.dsl_yaml,
+        active=policy.active,
+        compiled=policy.compiled or {},
+    )
+
+
+@app.get("/api/v1/agents/{agent_id}/policy", response_model=PolicyResponse)
+async def get_agent_policy(
+    agent_id: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+        policy = await PolicyRepository(session).get_active(agent.id)
+        if policy is None:
+            raise HTTPException(status_code=404, detail="Policy not set for agent")
+        return _policy_to_response(policy)
+
+
+@app.put("/api/v1/agents/{agent_id}/policy", response_model=PolicyResponse)
+async def put_agent_policy(
+    agent_id: str,
+    body: PolicyPutRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    try:
+        compiled = compile_yaml(body.dsl_yaml)
+    except PolicyError as e:
+        raise HTTPException(status_code=422, detail=f"Invalid policy: {e}")
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+        policy = await PolicyRepository(session).create_version(
+            agent.id, body.dsl_yaml, _compiled_to_dict(compiled),
+        )
+        return _policy_to_response(policy)
+
+
+@app.post("/api/v1/policies/validate", response_model=PolicyValidateResponse)
+async def validate_policy(
+    body: PolicyValidateRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    try:
+        compiled = compile_yaml(body.dsl_yaml)
+    except PolicyError as e:
+        return PolicyValidateResponse(valid=False, errors=[str(e)])
+    return PolicyValidateResponse(
+        valid=True,
+        window=list(compiled.window) if compiled.window else None,
+    )
 
 
 # ── Health ─────────────────────────────────────────────────────────────
