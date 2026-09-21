@@ -100,7 +100,7 @@
 
 ### P4 — Friendly-ядро + бренд (2–3 нед)
 - [x] S4-01 Дизайн-система + статика (вариант A): токены SPEC §11 (`static/tokens.css`: цвета/типографика/8pt/радиусы/motion/тени + light-тема), UI вынесен из main.py в `static/` (index.html, dashboard.css на токенах, dashboard.js, manifest.webmanifest — PWA); `main.py` 1111→~650 строк (FileResponse + StaticFiles); заголовок дашборда — KARTA. 4 теста (root/static/manifest/id-связность). Коммит `87ce4dd`.
-- [ ] S4-02 Кокпит (статус-бар/план-таймлайн/лента решений/спарклайны)
+- [x] S4-02 Кокпит: топбар с WS-индикатором (LIVE/OFFLINE + автопереподключение), карточки агентов (статус-бейджи, start/stop/kill/heartbeat/цель/tx), статус-карточка (сеть, кошелёк, heartbeat), **лента решений** с confidence-баром, risk-бейджем и кнопкой **«Почему?»** (policy_verdict/флаги), **очередь undo** (отмена), **Sakshi Log** с раскрытием payload и хвостом hash, tx-drawer. WS-события live-обновляют список/ленту (agent.status/decision.proposed/action.scheduled). JS: XSS-safe (textContent),  чист; PnL/балансы — честный empty-state (источник данных в S5). Живая проверка: сервер на :8090 отдаёт кокпит (Лента решений/Sakshi/Очередь undo). Коммит `0029236`.
 - [ ] S4-03 Chat-first (NL → превью → подтверждение → квитанция)
 - [ ] S4-04 Onboarding ≤5 мин, тиры 0–3, demo-режим по умолчанию
 - [ ] S4-05 Decision diary + «Почему?» + Decision Transparency Card
