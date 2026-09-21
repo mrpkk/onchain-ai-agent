@@ -15,6 +15,7 @@ function onLangChanged() {
     renderAgents();
     renderStatusCard();
     if (SELECTED) { refreshFeed(); refreshPending(); refreshAudit(); refreshReport(); }
+    refreshApprovals();
   }
 }
 
@@ -132,6 +133,7 @@ function showDashboard() {
   document.getElementById("dash-screen").style.display = "block";
   document.getElementById("dash-username").textContent = USERNAME;
   loadAgents();
+  refreshApprovals();
   connectWS();
 }
 
@@ -176,6 +178,7 @@ function handleWsEvent(data) {
   }
   if (data.type === "approval.requested") {
     toast(t("toast.approval", { action: data.action || "…" }), "error");
+    refreshApprovals();
     return;
   }
   if (data.type === "action.scheduled") {
@@ -563,6 +566,49 @@ async function onbFinish() {
   toast(t("onb.created", { mode: (TIER_INFO[ONB.tier] || TIER_INFO[0]).name }), "success");
   await loadAgents();
   selectAgent(res.id);
+}
+
+/* ── Approvals inbox (S4-05): web-путь тот же, что у Telegram ─────── */
+async function refreshApprovals() {
+  const list = document.getElementById("approvals-list");
+  const count = document.getElementById("approvals-count");
+  if (!list) return;
+  const res = await api("/api/v1/approvals");
+  if (res.detail) { list.replaceChildren(el("div", "empty", res.detail)); count.textContent = "0"; return; }
+  const items = res.approvals || [];
+  count.textContent = String(res.total || 0);
+  list.replaceChildren();
+  if (!items.length) { list.appendChild(el("div", "empty", t("empty.no_approvals"))); return; }
+  items.forEach((item) => list.appendChild(approvalCard(item)));
+}
+
+function approvalCard(item) {
+  const card = el("div", "decision-card");
+  const head = el("div", "head");
+  head.appendChild(el("span", "action", (item.agent_name || "") + " · " + (item.action || "—")));
+  head.appendChild(el("span", "time", fmtTime(item.created_at)));
+  card.appendChild(head);
+  card.appendChild(el("div", "params", JSON.stringify(item.params || {}, null, 2)));
+  if (item.reasoning) card.appendChild(el("div", "reasoning", item.reasoning));
+
+  const actions = el("div", "intent-actions");
+  const approveBtn = el("button", "btn primary small", t("btn.approve"));
+  approveBtn.onclick = async () => {
+    const r = await api("/api/v1/approvals/" + item.id + "/approve", { method: "POST" });
+    if (r.detail || r.error) { toast(r.detail || r.error || t("toast.error"), "error"); return; }
+    toast(r.executed ? t("toast.approved_exec") : t("toast.approved_recorded"), "success");
+    refreshApprovals();
+  };
+  const rejectBtn = el("button", "btn danger small", t("btn.reject"));
+  rejectBtn.onclick = async () => {
+    const r = await api("/api/v1/approvals/" + item.id + "/reject", { method: "POST" });
+    if (r.detail || r.error) { toast(r.detail || r.error || t("toast.error"), "error"); return; }
+    toast(t("toast.rejected"), "info");
+    refreshApprovals();
+  };
+  actions.append(approveBtn, rejectBtn);
+  card.appendChild(actions);
+  return card;
 }
 
 /* ── Reports / CSV export (S4-07) ─────────────────────────────────── */
