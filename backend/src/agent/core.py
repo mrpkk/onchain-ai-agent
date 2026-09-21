@@ -49,6 +49,7 @@ class AgentConfig:
     ai_base_url: str = "https://api.mistral.ai/v1"
     polling_interval: int = 60
     kill_switch: bool = False
+    deadman_timeout_seconds: int = 0  # 0 = выключен
 
 
 @dataclass
@@ -125,6 +126,7 @@ class OnChainAgent:
         )
         self._execution_times: list[datetime] = []
         self._revert_streak = 0
+        self._last_heartbeat: datetime = datetime.now(timezone.utc)
         self._db_agent_id = db_agent_id
         self._sakshi = sakshi
         self._event_sink = event_sink
@@ -311,6 +313,25 @@ class OnChainAgent:
             error=None,
         )
 
+    def heartbeat(self) -> None:
+        """Пинг живости от владельца/системы. Продлевает dead-man switch."""
+        self._last_heartbeat = datetime.now(timezone.utc)
+        self._log_audit("heartbeat", {})
+
+    def _check_deadman(self) -> bool:
+        """True и hard-kill, если heartbeat не приходил дольше таймаута."""
+        timeout = self.config.deadman_timeout_seconds
+        if timeout <= 0:
+            return False
+        elapsed = (datetime.now(timezone.utc) - self._last_heartbeat).total_seconds()
+        if elapsed <= timeout:
+            return False
+        self._log_audit("deadman_triggered", {"elapsed_seconds": int(elapsed),
+                                              "timeout_seconds": timeout})
+        self.trigger_kill_switch(mode="hard",
+                                 reason=f"dead man switch: no heartbeat for {int(elapsed)}s")
+        return True
+
     def cancel_pending(self, item_id: str) -> bool:
         """Отмена отложенного действия (окно undo)."""
         cancelled = self.timelock.cancel(item_id)
@@ -418,6 +439,9 @@ class OnChainAgent:
 
     async def _tick(self):
         self.state.status = "thinking"
+
+        if self._check_deadman():
+            return
 
         await self._process_due_actions()
 
