@@ -20,7 +20,12 @@ from .models import (
     AgentUpdate,
     GoalRequest,
     HealthResponse,
+    AuditEventResponse,
+    AuditListResponse,
+    DecisionListResponse,
+    DecisionResponse,
     KillSwitchRequest,
+    PendingListResponse,
     PolicyPutRequest,
     PolicyResponse,
     PolicyValidateRequest,
@@ -35,8 +40,10 @@ from .models import (
     UserOut,
 )
 from ..config.settings import get_settings, validate_security
-from ..db import (AgentRepository, PolicyRepository, TransactionRepository,
-                  UserRepository, create_all, session_scope)
+from ..db import (AgentRepository, DecisionRepository, PolicyRepository,
+                  TransactionRepository, UserRepository, create_all, session_scope)
+from ..runtime import build_agent
+from ..runtime import manager as runtime_manager
 from ..security.dharma import PolicyError, compile_yaml
 from ..security.passwords import hash_password, verify_and_upgrade
 from ..security.tokens import (
@@ -49,6 +56,7 @@ from ..security.tokens import (
 )
 from .health import collect_health
 from .ratelimit import SlidingWindowLimiter
+from .ws import agent_event_sink
 from .ws import manager as ws_manager
 from .ws import router as ws_router
 
@@ -340,6 +348,8 @@ async def start_agent(
             raise HTTPException(status_code=409, detail="Agent has been killed")
         await AgentRepository(session).set_status(agent, AgentStatus.RUNNING.value)
         response = _agent_to_response(agent)
+        runtime = await build_agent(agent, event_sink=agent_event_sink)
+    await runtime_manager.start(str(agent.id), runtime)
     await ws_manager.broadcast({"type": "agent.status", "agent_id": str(agent.id),
                                 "status": AgentStatus.RUNNING.value})
     return response
@@ -356,6 +366,7 @@ async def stop_agent(
             raise HTTPException(status_code=409, detail="Agent is not running")
         await AgentRepository(session).set_status(agent, AgentStatus.STOPPED.value)
         response = _agent_to_response(agent)
+    await runtime_manager.stop(str(agent.id))
     await ws_manager.broadcast({"type": "agent.status", "agent_id": str(agent.id),
                                 "status": AgentStatus.STOPPED.value})
     return response
@@ -385,6 +396,10 @@ async def kill_switch(
         agent.config = {**(agent.config or {}), "kill_reason": body.reason}
         await AgentRepository(session).set_status(agent, AgentStatus.KILLED.value)
         response = _agent_to_response(agent)
+    runtime = runtime_manager.get(str(agent.id))
+    if runtime is not None:
+        runtime.trigger_kill_switch(mode="hard", reason=body.reason)
+        await runtime_manager.stop(str(agent.id))
     await ws_manager.broadcast({"type": "agent.status", "agent_id": str(agent.id),
                                 "status": AgentStatus.KILLED.value, "reason": body.reason})
     return response
@@ -406,6 +421,99 @@ async def list_transactions(
         total = await repo.count_for_agent(agent.id)
         items = [_tx_to_response(tx) for tx in txs]
     return TransactionListResponse(transactions=items, total=total)
+
+
+# ── Runtime ops: heartbeat / pending / decisions / audit (S3-06) ───────
+
+def _decision_to_response(row) -> DecisionResponse:
+    return DecisionResponse(
+        id=str(row.id), action=row.action, reasoning=row.reasoning,
+        confidence=row.confidence, risk_level=row.risk_level,
+        policy_verdict=row.policy_verdict, requires_approval=row.requires_approval,
+        status=row.status, created_at=row.created_at,
+    )
+
+
+async def _require_running_agent(agent_id: str, current_user: dict):
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+    runtime = runtime_manager.get(str(agent.id))
+    if runtime is None:
+        raise HTTPException(status_code=409, detail="Agent is not running")
+    return agent, runtime
+
+
+@app.post("/api/v1/agents/{agent_id}/heartbeat")
+async def agent_heartbeat(
+    agent_id: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    agent, runtime = await _require_running_agent(agent_id, current_user)
+    runtime.heartbeat()
+    return {"status": "ok", "agent_id": str(agent.id)}
+
+
+@app.get("/api/v1/agents/{agent_id}/pending", response_model=PendingListResponse)
+async def list_pending_actions(
+    agent_id: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    _agent, runtime = await _require_running_agent(agent_id, current_user)
+    items = [p.to_dict() for p in runtime.timelock.pending()]
+    return PendingListResponse(pending=items, total=len(items))
+
+
+@app.post("/api/v1/agents/{agent_id}/pending/{pending_id}/cancel")
+async def cancel_pending_action(
+    agent_id: str,
+    pending_id: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    _agent, runtime = await _require_running_agent(agent_id, current_user)
+    if not runtime.cancel_pending(pending_id):
+        raise HTTPException(status_code=404, detail="Pending action not found")
+    return {"status": "ok", "cancelled": pending_id}
+
+
+@app.get("/api/v1/agents/{agent_id}/decisions", response_model=DecisionListResponse)
+async def list_decisions(
+    agent_id: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+    offset: int = 0,
+    limit: int = 50,
+):
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+        repo = DecisionRepository(session)
+        rows = await repo.list_for_agent(agent.id, offset=offset, limit=limit)
+        total = await repo.count_for_agent(agent.id)
+        items = [_decision_to_response(row) for row in rows]
+    return DecisionListResponse(decisions=items, total=total)
+
+
+@app.get("/api/v1/agents/{agent_id}/audit", response_model=AuditListResponse)
+async def list_audit_events(
+    agent_id: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+    limit: int = 200,
+):
+    from ..security.sakshi import AuditKeyMissing, SakshiLog
+
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+        try:
+            log = SakshiLog()
+        except AuditKeyMissing:
+            raise HTTPException(status_code=503, detail="Audit key is not configured")
+        events = await log.list_events(session, agent_id=agent.id, limit=limit)
+        items = [
+            AuditEventResponse(
+                id=e.id, actor=e.actor, event_type=e.event_type, payload=e.payload or {},
+                prev_hash=e.prev_hash, hash=e.hash, created_at=e.created_at,
+            )
+            for e in events
+        ]
+    return AuditListResponse(events=items, total=len(items))
 
 
 # ── Policy (Dharma DSL, SPEC S3-01) ────────────────────────────────────

@@ -152,3 +152,42 @@ class PolicyValidateResponse(BaseModel):
     valid: bool
     errors: list[str] = Field(default_factory=list)
     window: Optional[list[int]] = None
+
+
+# ── Runtime / Diary / Audit (S3-06) ────────────────────────────────────
+
+class DecisionResponse(BaseModel):
+    id: str
+    action: str
+    reasoning: Optional[str] = None
+    confidence: Optional[float] = None
+    risk_level: Optional[str] = None
+    policy_verdict: Optional[dict] = None
+    requires_approval: bool = False
+    status: str = "proposed"
+    created_at: datetime
+
+
+class DecisionListResponse(BaseModel):
+    decisions: list[DecisionResponse]
+    total: int
+
+
+class AuditEventResponse(BaseModel):
+    id: int
+    actor: str
+    event_type: str
+    payload: dict = Field(default_factory=dict)
+    prev_hash: Optional[str] = None
+    hash: Optional[str] = None
+    created_at: datetime
+
+
+class AuditListResponse(BaseModel):
+    events: list[AuditEventResponse]
+    total: int
+
+
+class PendingListResponse(BaseModel):
+    pending: list[dict]
+    total: int

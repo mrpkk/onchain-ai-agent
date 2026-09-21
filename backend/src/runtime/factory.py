@@ -1,0 +1,62 @@
+"""Сборка runtime-агента из записи БД (SPEC S3-06: интеграция API⟷Runtime).
+
+Агент собирается из: агент-строки (agents), активной Dharma-политики (policies),
+KeyVault (ключ кошелька), Sakshi Log, WS event_sink. Если политики нет —
+дефолтная консервативная; если vault/audit-ключ не настроены — агент работает
+в режиме без исполнения (честный fail-safe).
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Optional
+
+from ..agent.core import AgentConfig, OnChainAgent
+from ..db import PolicyRepository, session_scope
+from ..security.dharma import build_default_policy, compile_yaml
+from ..security.keyvault import KeyVault, master_key_from_env
+from ..security.sakshi import AuditKeyMissing, SakshiLog
+
+logger = logging.getLogger("runtime.factory")
+
+CHAIN_NAMES = {1: "ethereum", 56: "bsc", 137: "polygon", 11155111: "sepolia"}
+
+
+async def build_agent(agent_row, *, event_sink=None,
+                      vault: Optional[KeyVault] = None,
+                      sakshi: Optional[SakshiLog] = None) -> OnChainAgent:
+    """Собирает OnChainAgent для записи агента из БД."""
+    async with session_scope() as session:
+        policy_row = await PolicyRepository(session).get_active(agent_row.id)
+
+    if policy_row is not None:
+        policy = compile_yaml(policy_row.dsl_yaml)
+    else:
+        policy = build_default_policy()
+
+    if vault is None:
+        try:
+            vault = KeyVault(master_key_from_env())
+        except RuntimeError as e:
+            logger.warning("Runtime: KeyVault недоступен (%s) — без кошелька", e)
+            vault = None
+
+    if sakshi is None:
+        try:
+            sakshi = SakshiLog()
+        except AuditKeyMissing as e:
+            logger.warning("Runtime: Sakshi недоступен (%s) — аудит только в память", e)
+            sakshi = None
+
+    config = AgentConfig(
+        name=agent_row.name,
+        chain=CHAIN_NAMES.get(agent_row.chain_id, "ethereum"),
+    )
+    return OnChainAgent(
+        config,
+        vault=vault,
+        policy=policy,
+        db_agent_id=agent_row.id,
+        sakshi=sakshi,
+        event_sink=event_sink,
+    )
