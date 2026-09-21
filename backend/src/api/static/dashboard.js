@@ -272,7 +272,7 @@ async function selectAgent(agentId) {
   document.getElementById("chat-result").replaceChildren();
   renderAgents();
   renderStatusCard();
-  await Promise.all([refreshFeed(), refreshPending(), refreshAudit()]);
+  await Promise.all([refreshFeed(), refreshPending(), refreshAudit(), refreshReport()]);
 }
 
 /* ── Chat-first intent (S4-03) ────────────────────────────────────── */
@@ -553,6 +553,42 @@ async function onbFinish() {
   toast("Агент создан · режим " + (TIER_INFO[ONB.tier] || TIER_INFO[0]).name, "success");
   await loadAgents();
   selectAgent(res.id);
+}
+
+/* ── Reports / CSV export (S4-07) ─────────────────────────────────── */
+async function refreshReport() {
+  const box = document.getElementById("report-summary");
+  if (!SELECTED) { box.replaceChildren(el("div", "empty", "—")); return; }
+  const res = await api("/api/v1/agents/" + SELECTED + "/reports/summary");
+  if (res.detail) { box.replaceChildren(el("div", "empty", res.detail)); return; }
+  box.replaceChildren();
+  const lines = [
+    ["Решения", res.decisions_count],
+    ["Транзакции", res.transactions_count + " (confirmed: " + res.transactions_confirmed + ")"],
+    ["Газ (ETH)", res.gas_spent_eth],
+  ];
+  lines.forEach(([label, value]) => {
+    const row = el("div", "status-line");
+    row.appendChild(el("span", "muted", label));
+    row.appendChild(el("span", "mono", String(value)));
+    box.appendChild(row);
+  });
+  const pnl = el("div", "warn-list", "PnL: " + (res.pnl_available ? res.realized_pnl : (res.pnl_reason || "нет данных")));
+  box.appendChild(pnl);
+}
+
+async function downloadCsv(dataset) {
+  if (!SELECTED) { toast("Выберите агента", "error"); return; }
+  const resp = await fetch("/api/v1/agents/" + SELECTED + "/export.csv?dataset=" + dataset,
+                           { headers: { Authorization: "Bearer " + TOKEN } });
+  if (!resp.ok) { toast("Ошибка экспорта", "error"); return; }
+  const blob = await resp.blob();
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "karta_" + dataset + ".csv";
+  link.click();
+  URL.revokeObjectURL(link.href);
+  toast("CSV: " + dataset, "success");
 }
 
 /* ── Transactions drawer ──────────────────────────────────────────── */

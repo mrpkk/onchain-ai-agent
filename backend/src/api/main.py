@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -56,6 +56,7 @@ from ..db import (AgentRepository, ApprovalRepository, DecisionRepository, Polic
                   TransactionRepository, UserRepository, create_all, session_scope)
 from ..runtime import TIER_POLICY_TEMPLATES, build_agent
 from ..runtime.approvals import resolve_approval
+from ..runtime.reports import build_summary, decisions_csv, transactions_csv
 from ..runtime import manager as runtime_manager
 from ..security.dharma import PolicyError, TxContext, build_default_policy, compile_yaml, evaluate
 from ..agent.intent import parse_intent
@@ -480,6 +481,50 @@ async def list_transactions(
         total = await repo.count_for_agent(agent.id)
         items = [_tx_to_response(tx) for tx in txs]
     return TransactionListResponse(transactions=items, total=total)
+
+
+# ── Reports / export (S4-07) ───────────────────────────────────────────
+
+@app.get("/api/v1/agents/{agent_id}/reports/summary")
+async def agent_report_summary(
+    agent_id: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+        return await build_summary(session, agent.id)
+
+
+@app.get("/api/v1/agents/{agent_id}/export.csv")
+async def agent_export_csv(
+    agent_id: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+    dataset: str = "decisions",
+):
+    if dataset not in ("decisions", "transactions", "audit"):
+        raise HTTPException(status_code=422, detail="dataset: decisions|transactions|audit")
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+        if dataset == "decisions":
+            rows = await DecisionRepository(session).list_for_agent(agent.id, limit=5000)
+            payload = decisions_csv(rows)
+        elif dataset == "transactions":
+            rows = await TransactionRepository(session).list_for_agent(agent.id, limit=5000)
+            payload = transactions_csv(rows)
+        else:
+            from ..security.sakshi import AuditKeyMissing, SakshiLog
+
+            try:
+                log = SakshiLog()
+            except AuditKeyMissing:
+                raise HTTPException(status_code=503, detail="Audit key is not configured")
+            events = await log.list_events(session, agent_id=agent.id, limit=5000)
+            payload = log.export_csv(events)
+    return Response(
+        content=payload,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="karta_{dataset}_{str(agent_id)[:8]}.csv"'},
+    )
 
 
 # ── Approvals: web + Telegram (S4-06) ──────────────────────────────────

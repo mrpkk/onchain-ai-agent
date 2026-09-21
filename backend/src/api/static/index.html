@@ -96,6 +96,16 @@
         <div class="empty">—</div>
       </div>
     </section>
+
+    <section class="panel">
+      <div class="panel-head"><h3>Отчёты</h3><button class="btn ghost small" onclick="refreshReport()">Обновить</button></div>
+      <div id="report-summary" class="status-card"><div class="empty">—</div></div>
+      <div class="intent-actions" style="margin-top:10px">
+        <button class="btn small ghost" onclick="downloadCsv('decisions')">CSV решения</button>
+        <button class="btn small ghost" onclick="downloadCsv('transactions')">CSV транзакции</button>
+        <button class="btn small ghost" onclick="downloadCsv('audit')">CSV аудит</button>
+      </div>
+    </section>
   </main>
 
   <div class="tx-panel" id="tx-panel">
