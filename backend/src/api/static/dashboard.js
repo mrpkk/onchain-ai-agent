@@ -178,6 +178,7 @@ async function loadAgents() {
   AGENTS = res.agents || [];
   renderAgents();
   if (AGENTS.length && !SELECTED) selectAgent(AGENTS[0].id);
+  if (!AGENTS.length && !sessionStorage.getItem("karta_onb_dismissed")) startOnboarding();
 }
 
 function renderAgents() {
@@ -473,6 +474,81 @@ async function refreshAudit() {
     row.onclick = () => { details.style.display = details.style.display === "none" ? "block" : "none"; };
     list.append(row, details);
   });
+}
+
+/* ── Onboarding (S4-04) ───────────────────────────────────────────── */
+const TIER_INFO = {
+  0: { name: "Demo", per_tx: 0.1, daily: 0.5 },
+  1: { name: "Simulated", per_tx: 0.5, daily: 2.0 },
+};
+let ONB = { tier: 0, template: null };
+
+function startOnboarding() {
+  ONB = { tier: 0, template: null };
+  document.getElementById("onb-goal").value = "";
+  onbPickTier(0);
+  onbStep(1);
+  document.getElementById("onboarding-modal").classList.add("show");
+}
+
+function closeOnboarding() {
+  document.getElementById("onboarding-modal").classList.remove("show");
+  sessionStorage.setItem("karta_onb_dismissed", "1");
+}
+
+function onbStep(n) {
+  [1, 2, 3].forEach((i) => {
+    document.getElementById("onb-step-" + i).style.display = i === n ? "block" : "none";
+  });
+  if (n === 3) renderOnbLimits();
+}
+
+function onbPickTier(tier) {
+  ONB.tier = tier;
+  document.querySelectorAll("#onb-step-1 .onb-card[data-tier]").forEach((card) => {
+    card.classList.toggle("selected", Number(card.dataset.tier) === tier);
+  });
+}
+
+function onbPickTemplate(kind) {
+  ONB.template = kind;
+  document.querySelectorAll("#onb-step-2 .onb-card[data-tpl]").forEach((card) => {
+    card.classList.toggle("selected", card.dataset.tpl === kind);
+  });
+  const goal = document.getElementById("onb-goal");
+  if (kind === "gas") goal.value = "Следить за газом и сообщать, когда он ниже 20 gwei";
+  else if (kind === "balance") goal.value = "Следить за балансом кошелька и предупреждать об изменениях";
+}
+
+function renderOnbLimits() {
+  const info = TIER_INFO[ONB.tier] || TIER_INFO[0];
+  document.getElementById("onb-limits-body").textContent = JSON.stringify({
+    tier: ONB.tier,
+    name: info.name,
+    per_tx_eth: info.per_tx,
+    daily_eth: info.daily,
+    execution: "simulation (Phase 5 — реальное исполнение за STOP-GATE)",
+  }, null, 2);
+}
+
+async function onbFinish() {
+  const goal = document.getElementById("onb-goal").value.trim() || "Наблюдать за состоянием сети";
+  const res = await api("/api/v1/agents", {
+    method: "POST",
+    body: {
+      name: "Агент " + (TIER_INFO[ONB.tier] || TIER_INFO[0]).name,
+      description: "Создан мастером настройки",
+      strategy: "monitoring",
+      chain_id: 11155111,
+      tier: ONB.tier,
+    },
+  });
+  if (!res.id) { toast(res.detail || "Ошибка создания", "error"); return; }
+  await api("/api/v1/agents/" + res.id + "/goal", { method: "POST", body: { goal } });
+  closeOnboarding();
+  toast("Агент создан · режим " + (TIER_INFO[ONB.tier] || TIER_INFO[0]).name, "success");
+  await loadAgents();
+  selectAgent(res.id);
 }
 
 /* ── Transactions drawer ──────────────────────────────────────────── */

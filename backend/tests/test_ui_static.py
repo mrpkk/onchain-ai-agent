@@ -46,6 +46,9 @@ def test_static_assets_served(client):
         ("/static/dashboard.js", "Почему?"),
         ("/static/dashboard.js", "parseChat"),
         ("/static/dashboard.js", "intent/confirm"),
+        ("/static/dashboard.js", "startOnboarding"),
+        ("/static/dashboard.js", "onbFinish"),
+        ("/static/dashboard.css", ".onb-card"),
         ("/static/manifest.webmanifest", "KARTA"),
     ):
         response = client.get(path)
@@ -64,5 +67,6 @@ def test_dashboard_ids_present(client):
     body = client.get("/").text
     for element_id in ("auth-screen", "dash-screen", "agent-list", "create-modal",
                        "goal-modal", "tx-panel", "toast", "chat-input",
-                       "chat-preview", "chat-result"):
+                       "chat-preview", "chat-result", "onboarding-modal",
+                       "onb-step-1", "onb-step-3"):
         assert f'id="{element_id}"' in body, element_id

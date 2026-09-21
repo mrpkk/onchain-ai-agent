@@ -41,6 +41,7 @@
     <div class="brand"><span class="brand-dot"></span><span>KARTA</span></div>
     <div class="topbar-right">
       <span class="badge" id="ws-status" data-state="offline">WS OFFLINE</span>
+      <button class="btn ghost small" onclick="startOnboarding()">Мастер</button>
       <span class="muted" id="dash-username"></span>
       <a class="link" href="/docs" target="_blank" rel="noopener">API</a>
       <button class="btn ghost" onclick="doLogout()">Выйти</button>
@@ -103,6 +104,46 @@
       <button class="icon-btn" onclick="hideTxPanel()">✕</button>
     </div>
     <div class="tx-list" id="tx-list"><div class="empty">—</div></div>
+  </div>
+</div>
+
+<!-- ═══ Onboarding (S4-04) ═══ -->
+<div class="modal-overlay" id="onboarding-modal">
+  <div class="modal wide-modal">
+    <h3>Настройка агента за 3 шага</h3>
+    <div id="onb-step-1">
+      <p class="muted">Режим работы</p>
+      <div class="onb-cards">
+        <div class="onb-card selected" data-tier="0" onclick="onbPickTier(0)"><b>Demo</b><span>Виртуальные средства — безопасно</span></div>
+        <div class="onb-card" data-tier="1" onclick="onbPickTier(1)"><b>Simulated</b><span>Реальные данные, без исполнения</span></div>
+        <div class="onb-card disabled"><b>Live</b><span>Phase 5 · STOP-GATE</span></div>
+      </div>
+      <div class="modal-btns">
+        <button class="btn ghost" onclick="closeOnboarding()">Позже</button>
+        <button class="btn primary" onclick="onbStep(2)">Далее</button>
+      </div>
+    </div>
+    <div id="onb-step-2" style="display:none">
+      <p class="muted">Шаблон задачи</p>
+      <div class="onb-cards">
+        <div class="onb-card" data-tpl="gas" onclick="onbPickTemplate('gas')"><b>Газ-монитор</b><span>Следить за газом</span></div>
+        <div class="onb-card" data-tpl="balance" onclick="onbPickTemplate('balance')"><b>Баланс-страж</b><span>Следить за балансом</span></div>
+        <div class="onb-card" data-tpl="custom" onclick="onbPickTemplate('custom')"><b>Своя цель</b><span>Сформулирую сам</span></div>
+      </div>
+      <textarea id="onb-goal" placeholder="Цель агента…" style="margin-top:10px"></textarea>
+      <div class="modal-btns">
+        <button class="btn ghost" onclick="onbStep(1)">Назад</button>
+        <button class="btn primary" onclick="onbStep(3)">Далее</button>
+      </div>
+    </div>
+    <div id="onb-step-3" style="display:none">
+      <p class="muted">Лимиты тира</p>
+      <div class="intent-card"><div class="params" id="onb-limits-body">—</div></div>
+      <div class="modal-btns">
+        <button class="btn ghost" onclick="onbStep(2)">Назад</button>
+        <button class="btn primary" onclick="onbFinish()">Запустить</button>
+      </div>
+    </div>
   </div>
 </div>
 

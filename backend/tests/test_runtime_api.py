@@ -238,20 +238,21 @@ def test_factory_builds_agent_with_policy(env):
 
 
 def test_factory_default_policy_without_dsl(env):
-    client, _created, _ = env
-    token = _auth(client)
-    agent_id = _agent(client, token)
-
-    from src.db import AgentRepository, session_scope
+    """Агент без policy-строки: фабрика берёт лимиты тира (S4-04)."""
+    from src.db import AgentRepository, UserRepository, session_scope
     from src.runtime import build_agent
+    from src.runtime.tiers import TIER_LIMITS
 
-    async def _build():
+    async def _seed_and_build():
         async with session_scope() as session:
-            row = await AgentRepository(session).get(uuid.UUID(agent_id))
-            return await build_agent(row, event_sink=None)
+            user = await UserRepository(session).create("fac-user", "h")
+            row = await AgentRepository(session).create(user.id, name="fac-agent", tier=0)
+        async with session_scope() as session:
+            fresh = await AgentRepository(session).get(row.id)
+            return await build_agent(fresh, event_sink=None)
 
     database.reset_engine()
-    agent = asyncio.run(_build())
+    agent = asyncio.run(_seed_and_build())
     database.reset_engine()
 
-    assert agent.policy.model.limits.per_tx_eth == pytest.approx(1.0)  # дефолт
+    assert agent.policy.model.limits.per_tx_eth == pytest.approx(TIER_LIMITS[0][0])

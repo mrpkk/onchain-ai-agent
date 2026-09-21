@@ -155,3 +155,14 @@ textarea { min-height: 80px; resize: vertical; }
 .intent-card .params { font-family: var(--font-mono); font-size: .75rem; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; background: var(--bg-deep); border-radius: var(--radius-sm); padding: var(--space-2); }
 .intent-actions { display: flex; gap: var(--space-2); }
 .warn-list { color: var(--warning); font-size: .78rem; }
+
+/* ── Onboarding (S4-04) ───────────────────────────────────────────── */
+.wide-modal { width: 560px; }
+.onb-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); margin-top: var(--space-2); }
+.onb-card { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: var(--space-3); cursor: pointer; display: flex; flex-direction: column; gap: 4px; font-size: .82rem; transition: border-color var(--motion-fast); }
+.onb-card:hover { border-color: var(--border-strong); }
+.onb-card b { font-size: .9rem; }
+.onb-card span { color: var(--text-secondary); font-size: .74rem; }
+.onb-card.selected { border-color: var(--accent); box-shadow: var(--shadow-accent); }
+.onb-card.disabled { opacity: .45; cursor: not-allowed; }
+@media (max-width: 700px) { .onb-cards { grid-template-columns: 1fr; } }

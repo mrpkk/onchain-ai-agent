@@ -38,6 +38,7 @@ from .models import (
     PolicyValidateRequest,
     PolicyValidateResponse,
     RefreshRequest,
+    TierRequest,
     TokenRequest,
     TokenResponse,
     TransactionListResponse,
@@ -49,7 +50,7 @@ from .models import (
 from ..config.settings import get_settings, validate_security
 from ..db import (AgentRepository, DecisionRepository, PolicyRepository,
                   TransactionRepository, UserRepository, create_all, session_scope)
-from ..runtime import build_agent
+from ..runtime import TIER_POLICY_TEMPLATES, build_agent
 from ..runtime import manager as runtime_manager
 from ..security.dharma import PolicyError, TxContext, build_default_policy, compile_yaml, evaluate
 from ..agent.intent import parse_intent
@@ -257,6 +258,7 @@ def _agent_to_response(agent) -> AgentResponse:
         name=agent.name,
         description=agent.description or "",
         strategy=agent.strategy,
+        tier=int(agent.tier or 0),
         status=AgentStatus(agent.status),
         chain_id=agent.chain_id,
         wallet_address=agent.wallet_address,
@@ -315,7 +317,13 @@ async def create_agent(
             wallet_address=body.wallet_address,
             config=body.config,
             status=AgentStatus.CREATED.value,
+            tier=body.tier,
         )
+        dsl = TIER_POLICY_TEMPLATES.get(agent.tier)
+        if dsl:
+            await PolicyRepository(session).create_version(
+                agent.id, dsl, _compiled_to_dict(compile_yaml(dsl)),
+            )
         response = _agent_to_response(agent)
     return response
 
@@ -413,6 +421,26 @@ async def kill_switch(
         await runtime_manager.stop(str(agent.id))
     await ws_manager.broadcast({"type": "agent.status", "agent_id": str(agent.id),
                                 "status": AgentStatus.KILLED.value, "reason": body.reason})
+    return response
+
+
+@app.post("/api/v1/agents/{agent_id}/tier", response_model=AgentResponse)
+async def set_agent_tier(
+    agent_id: str,
+    body: TierRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    """Смена trust-тира (S4-04): обновляет агента и выпускает новую политику тира."""
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+        await AgentRepository(session).set_tier(agent, body.tier)
+        dsl = TIER_POLICY_TEMPLATES[body.tier]
+        await PolicyRepository(session).create_version(
+            agent.id, dsl, _compiled_to_dict(compile_yaml(dsl)),
+        )
+        response = _agent_to_response(agent)
+    await ws_manager.broadcast({"type": "agent.status", "agent_id": str(agent.id),
+                                "status": agent.status, "tier": body.tier})
     return response
 
 

@@ -16,6 +16,7 @@ from ..db import PolicyRepository, session_scope
 from ..security.dharma import build_default_policy, compile_yaml
 from ..security.keyvault import KeyVault, master_key_from_env
 from ..security.sakshi import AuditKeyMissing, SakshiLog
+from .tiers import tier_default_limits, tier_policy_template, tier_simulation_mode
 
 logger = logging.getLogger("runtime.factory")
 
@@ -29,10 +30,12 @@ async def build_agent(agent_row, *, event_sink=None,
     async with session_scope() as session:
         policy_row = await PolicyRepository(session).get_active(agent_row.id)
 
+    tier = int(getattr(agent_row, "tier", 0) or 0)
     if policy_row is not None:
         policy = compile_yaml(policy_row.dsl_yaml)
     else:
-        policy = build_default_policy()
+        per_tx, daily = tier_default_limits(tier)
+        policy = build_default_policy(per_tx_eth=per_tx, daily_eth=daily)
 
     if vault is None:
         try:
@@ -51,6 +54,7 @@ async def build_agent(agent_row, *, event_sink=None,
     config = AgentConfig(
         name=agent_row.name,
         chain=CHAIN_NAMES.get(agent_row.chain_id, "ethereum"),
+        simulation_mode=tier_simulation_mode(tier),
     )
     return OnChainAgent(
         config,

@@ -63,11 +63,15 @@ def _h(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-def test_policy_404_before_set(client):
+def test_policy_autocreated_from_tier(client):
+    """S4-04: при создании агента автоматически выпускается политика его тира."""
     token = _auth(client)
     agent_id = _agent(client, token)
     response = client.get(f"/api/v1/agents/{agent_id}/policy", headers=_h(token))
-    assert response.status_code == 404
+    assert response.status_code == 200
+    body = response.json()
+    assert body["version"] == 1
+    assert body["compiled"]["model"]["limits"]["per_tx_eth"] == 0.1  # tier 0
 
 
 def test_policy_put_and_get(client):
@@ -78,7 +82,7 @@ def test_policy_put_and_get(client):
                      json={"dsl_yaml": VALID_YAML}, headers=_h(token))
     assert put.status_code == 200
     body = put.json()
-    assert body["version"] == 1 and body["active"] is True
+    assert body["version"] == 2 and body["active"] is True  # v1 — авто-политика тира
     assert body["compiled"]["model"]["limits"]["per_tx_eth"] == 0.5
     assert body["compiled"]["model"]["deny"]["actions"] == ["deploy"]
 
@@ -97,10 +101,10 @@ def test_policy_versioning_deactivates_previous(client):
     put2 = client.put(f"/api/v1/agents/{agent_id}/policy",
                       json={"dsl_yaml": second_yaml}, headers=_h(token))
     assert put2.status_code == 200
-    assert put2.json()["version"] == 2
+    assert put2.json()["version"] == 3
 
     active = client.get(f"/api/v1/agents/{agent_id}/policy", headers=_h(token))
-    assert active.json()["version"] == 2
+    assert active.json()["version"] == 3
     assert active.json()["compiled"]["model"]["limits"]["per_tx_eth"] == 0.25
 
     async def _versions():
@@ -111,7 +115,7 @@ def test_policy_versioning_deactivates_previous(client):
             return await PolicyRepository(session).list_versions(_uuid.UUID(agent_id))
 
     versions = asyncio.run(_versions())
-    assert [(v.version, v.active) for v in versions] == [(2, True), (1, False)]
+    assert [(v.version, v.active) for v in versions] == [(3, True), (2, False), (1, False)]
 
 
 def test_policy_invalid_rejected(client):

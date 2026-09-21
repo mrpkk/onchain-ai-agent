@@ -61,6 +61,7 @@ class AgentCreate(BaseModel):
     chain_id: int = 1
     wallet_address: Optional[str] = None
     config: dict = Field(default_factory=dict)
+    tier: int = Field(default=0, ge=0, le=3)  # S4-04: 0 demo → 3 full
 
 
 class AgentUpdate(BaseModel):
@@ -75,6 +76,7 @@ class AgentResponse(BaseModel):
     name: str
     description: str
     strategy: str
+    tier: int = 0
     status: AgentStatus
     chain_id: int
     wallet_address: Optional[str] = None
@@ -96,6 +98,10 @@ class GoalRequest(BaseModel):
 
 class KillSwitchRequest(BaseModel):
     reason: str = "manual shutdown"
+
+
+class TierRequest(BaseModel):
+    tier: int = Field(..., ge=0, le=3)
 
 
 # ── Transactions ───────────────────────────────────────────────────────

@@ -45,10 +45,10 @@ class AgentRepository:
     async def create(self, owner_id: uuid.UUID, *, name: str, description: str = "",
                      strategy: str = "default", chain_id: int = 1,
                      wallet_address: str | None = None, config: dict | None = None,
-                     status: str = "created") -> Agent:
+                     status: str = "created", tier: int = 0) -> Agent:
         agent = Agent(owner_id=owner_id, name=name, description=description,
                       strategy=strategy, chain_id=chain_id, wallet_address=wallet_address,
-                      config=config or {}, status=status)
+                      config=config or {}, status=status, tier=tier)
         self.session.add(agent)
         await self.session.flush()
         return agent
@@ -78,6 +78,12 @@ class AgentRepository:
 
     async def set_status(self, agent: Agent, status: str) -> Agent:
         agent.status = status
+        agent.updated_at = _utcnow()
+        await self.session.flush()
+        return agent
+
+    async def set_tier(self, agent: Agent, tier: int) -> Agent:
+        agent.tier = tier
         agent.updated_at = _utcnow()
         await self.session.flush()
         return agent
