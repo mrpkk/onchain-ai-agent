@@ -33,6 +33,9 @@ def test_root_serves_cockpit(client):
     assert "KARTA" in body
     assert "/static/tokens.css" in body and "/static/dashboard.js" in body
     assert "/static/manifest.webmanifest" in body
+    assert "/static/i18n.js" in body
+    assert 'id="lang-btn"' in body
+    assert "data-i18n=" in body
 
 
 def test_static_assets_served(client):
@@ -43,7 +46,7 @@ def test_static_assets_served(client):
         ("/static/dashboard.js", "getElementById"),
         ("/static/dashboard.js", "new WebSocket"),
         ("/static/dashboard.js", "decision.proposed"),
-        ("/static/dashboard.js", "Почему?"),
+        ("/static/dashboard.js", 't("btn.why")'),
         ("/static/dashboard.js", "parseChat"),
         ("/static/dashboard.js", "intent/confirm"),
         ("/static/dashboard.js", "startOnboarding"),
@@ -72,3 +75,19 @@ def test_dashboard_ids_present(client):
                        "chat-preview", "chat-result", "onboarding-modal",
                        "onb-step-1", "onb-step-3", "report-summary"):
         assert f'id="{element_id}"' in body, element_id
+
+
+def test_i18n_dictionary_parity():
+    """RU/EN словари обязаны иметь одинаковый набор ключей (S4-08)."""
+    import re
+
+    source = (ROOT / "backend/src/api/static/i18n.js").read_text(encoding="utf-8")
+    ru_block = source.split("  ru: {", 1)[1].split("  en: {", 1)[0]
+    en_block = source.split("  en: {", 1)[1].split("\n  },\n};", 1)[0]
+
+    def keys(block: str) -> set:
+        return set(re.findall(r'"([\w.]+)":', block))
+
+    ru_keys, en_keys = keys(ru_block), keys(en_block)
+    assert ru_keys, "RU-словарь пуст"
+    assert ru_keys == en_keys, f"Расхождение ключей: {ru_keys ^ en_keys}"

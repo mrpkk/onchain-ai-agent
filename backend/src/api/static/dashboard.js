@@ -8,6 +8,16 @@ let SELECTED = null;
 let WS = null;
 let WS_RETRY = null;
 
+applyI18n();
+
+function onLangChanged() {
+  if (TOKEN) {
+    renderAgents();
+    renderStatusCard();
+    if (SELECTED) { refreshFeed(); refreshPending(); refreshAudit(); refreshReport(); }
+  }
+}
+
 if (TOKEN) { showDashboard(); }
 
 /* ── API / UI helpers ─────────────────────────────────────────────── */
@@ -156,28 +166,28 @@ function handleWsEvent(data) {
     const agent = AGENTS.find((a) => a.id === data.agent_id);
     if (agent) { agent.status = data.status; renderAgents(); }
     if (SELECTED && SELECTED === data.agent_id) { renderStatusCard(); refreshPending(); }
-    toast("Агент: " + data.status, data.status === "killed" ? "error" : "info");
+    toast(t("toast.agent_status", { status: data.status }), data.status === "killed" ? "error" : "info");
     return;
   }
   if (data.type === "decision.proposed") {
     if (SELECTED && data.agent_id === SELECTED) refreshFeed();
-    toast("Решение: " + data.action + " (уверенность " + Math.round((data.confidence || 0) * 100) + "%)", "info");
+    toast(t("toast.decision", { action: data.action, confidence: Math.round((data.confidence || 0) * 100) }), "info");
     return;
   }
   if (data.type === "approval.requested") {
-    toast("Требуется подтверждение: " + (data.action || "действие"), "error");
+    toast(t("toast.approval", { action: data.action || "…" }), "error");
     return;
   }
   if (data.type === "action.scheduled") {
     if (SELECTED && data.agent_id === SELECTED) refreshPending();
-    toast("Действие отложено (окно undo)", "info");
+    toast(t("toast.scheduled"), "info");
   }
 }
 
 /* ── Agents ───────────────────────────────────────────────────────── */
 async function loadAgents() {
   const list = document.getElementById("agent-list");
-  list.replaceChildren(el("div", "empty", "Загрузка…"));
+  list.replaceChildren(el("div", "empty", t("empty.loading")));
   const res = await api("/api/v1/agents");
   AGENTS = res.agents || [];
   renderAgents();
@@ -189,7 +199,7 @@ function renderAgents() {
   const list = document.getElementById("agent-list");
   list.replaceChildren();
   if (!AGENTS.length) {
-    list.appendChild(el("div", "empty", "Пока нет агентов — создайте первого"));
+    list.appendChild(el("div", "empty", t("empty.no_agents")));
     return;
   }
   AGENTS.forEach((agent) => {
@@ -202,15 +212,15 @@ function renderAgents() {
     row.onclick = () => selectAgent(agent.id);
 
     const actions = el("div", "agent-actions");
-    const startBtn = el("button", "btn small", "▶ Старт");
+    const startBtn = el("button", "btn small", t("btn.start"));
     startBtn.onclick = (e) => { e.stopPropagation(); agentAction(agent.id, "start"); };
-    const stopBtn = el("button", "btn small ghost", "⏸ Стоп");
+    const stopBtn = el("button", "btn small ghost", t("btn.stop"));
     stopBtn.onclick = (e) => { e.stopPropagation(); agentAction(agent.id, "stop"); };
-    const killBtn = el("button", "btn small danger", "☠ Kill");
+    const killBtn = el("button", "btn small danger", t("btn.kill"));
     killBtn.onclick = (e) => { e.stopPropagation(); killAgent(agent.id); };
-    const goalBtn = el("button", "btn small ghost", "🎯 Цель");
+    const goalBtn = el("button", "btn small ghost", t("btn.goal"));
     goalBtn.onclick = (e) => { e.stopPropagation(); showGoalModal(agent.id); };
-    const txBtn = el("button", "btn small ghost", "📋 Tx");
+    const txBtn = el("button", "btn small ghost", t("btn.tx"));
     txBtn.onclick = (e) => { e.stopPropagation(); showTxPanel(agent.id); };
     actions.append(startBtn, stopBtn, killBtn, goalBtn, txBtn);
     row.appendChild(actions);
@@ -220,15 +230,15 @@ function renderAgents() {
 
 async function agentAction(agentId, action) {
   const res = await api("/api/v1/agents/" + agentId + "/" + action, { method: "POST" });
-  if (res.id) { toast("Статус: " + res.status, "success"); await loadAgents(); }
-  else { toast(res.detail || "Ошибка", "error"); }
+  if (res.id) { toast(t("toast.status_prefix", { status: res.status }), "success"); await loadAgents(); }
+  else { toast(res.detail || t("toast.error"), "error"); }
 }
 
 async function killAgent(agentId) {
-  if (!confirm("Экстренная остановка (hard kill). Продолжить?")) return;
+  if (!confirm(t("confirm.kill"))) return;
   const res = await api("/api/v1/agents/" + agentId + "/kill-switch", { method: "POST", body: { reason: "cockpit" } });
-  if (res.id) { toast("Kill switch: агент остановлен", "error"); await loadAgents(); }
-  else { toast(res.detail || "Ошибка", "error"); }
+  if (res.id) { toast(t("toast.kill_done"), "error"); await loadAgents(); }
+  else { toast(res.detail || t("toast.error"), "error"); }
 }
 
 function showCreateModal() { document.getElementById("create-modal").classList.add("show"); }
@@ -236,7 +246,7 @@ function hideCreateModal() { document.getElementById("create-modal").classList.r
 
 async function createAgent() {
   const name = document.getElementById("new-name").value.trim();
-  if (!name) { toast("Укажите имя", "error"); return; }
+  if (!name) { toast(t("toast.enter_name"), "error"); return; }
   const body = {
     name,
     description: document.getElementById("new-desc").value.trim(),
@@ -246,11 +256,11 @@ async function createAgent() {
   const res = await api("/api/v1/agents", { method: "POST", body });
   if (res.id) {
     hideCreateModal();
-    toast("Агент создан", "success");
+    toast(t("toast.created"), "success");
     document.getElementById("new-name").value = "";
     await loadAgents();
     selectAgent(res.id);
-  } else { toast(res.detail || "Ошибка", "error"); }
+  } else { toast(res.detail || t("toast.error"), "error"); }
 }
 
 /* ── Goal ─────────────────────────────────────────────────────────── */
@@ -259,10 +269,10 @@ function showGoalModal(agentId) { GOAL_AGENT = agentId; document.getElementById(
 function hideGoalModal() { document.getElementById("goal-modal").classList.remove("show"); }
 async function setGoal() {
   const goal = document.getElementById("goal-text").value.trim();
-  if (!goal || !GOAL_AGENT) { toast("Введите цель", "error"); return; }
+  if (!goal || !GOAL_AGENT) { toast(t("toast.enter_goal"), "error"); return; }
   const res = await api("/api/v1/agents/" + GOAL_AGENT + "/goal", { method: "POST", body: { goal } });
-  if (res.id) { hideGoalModal(); toast("Цель поставлена", "success"); }
-  else { toast(res.detail || "Ошибка", "error"); }
+  if (res.id) { hideGoalModal(); toast(t("toast.goal_set"), "success"); }
+  else { toast(res.detail || t("toast.error"), "error"); }
 }
 
 /* ── Selected agent: status / pending / feed / audit ──────────────── */
@@ -279,14 +289,14 @@ async function selectAgent(agentId) {
 let CHAT_INTENT = null;
 
 async function parseChat() {
-  if (!SELECTED) { toast("Выберите агента", "error"); return; }
+  if (!SELECTED) { toast(t("toast.select_agent"), "error"); return; }
   const text = document.getElementById("chat-input").value.trim();
   if (!text) { toast("Введите задачу", "error"); return; }
   const preview = document.getElementById("chat-preview");
-  preview.replaceChildren(el("div", "empty", "Разбираю…"));
+  preview.replaceChildren(el("div", "empty", t("chat.parsing")));
   const res = await api("/api/v1/agents/" + SELECTED + "/intent", { method: "POST", body: { text } });
   if (!res.ok) {
-    preview.replaceChildren(el("div", "empty", res.detail || res.error || "Ошибка разбора"));
+    preview.replaceChildren(el("div", "empty", res.detail || res.error || t("chat.parse_error")));
     return;
   }
   CHAT_INTENT = res.intent;
@@ -302,7 +312,7 @@ function renderIntentPreview(res) {
   const head = el("div", "head");
   head.appendChild(el("span", "action", intent.action || "unknown"));
   head.appendChild(confBar(intent.confidence));
-  head.appendChild(el("span", "time", intent.needs_clarification ? "нужны уточнения" : "готово к подтверждению"));
+  head.appendChild(el("span", "time", intent.needs_clarification ? t("chat.clarify") : t("chat.ready")));
   card.appendChild(head);
 
   card.appendChild(el("div", "summary", intent.summary || "—"));
@@ -310,7 +320,7 @@ function renderIntentPreview(res) {
 
   const verdict = res.policy_verdict || {};
   const vline = el("div", "status-line");
-  vline.appendChild(el("span", "muted", "Dharma (предварительно)"));
+  vline.appendChild(el("span", "muted", t("label.policy_prelim")));
   const decision = verdict.decision || "unknown";
   const vbadge = el("span", "badge " + (decision === "allow" ? "risk-low" : decision === "deny" ? "risk-high" : "risk-medium"), "policy: " + decision);
   vline.appendChild(vbadge);
@@ -320,19 +330,19 @@ function renderIntentPreview(res) {
   }
 
   if ((intent.assumptions || []).length) {
-    card.appendChild(el("div", "muted", "Допущения: " + intent.assumptions.join("; ")));
+    card.appendChild(el("div", "muted", t("label.assumptions") + ": " + intent.assumptions.join("; ")));
   }
   if ((intent.questions || []).length) {
-    card.appendChild(el("div", "warn-list", "Уточните: " + intent.questions.join("; ")));
+    card.appendChild(el("div", "warn-list", t("label.clarify") + ": " + intent.questions.join("; ")));
   }
 
   const actions = el("div", "intent-actions");
   if (!intent.needs_clarification) {
-    const confirmBtn = el("button", "btn primary small", "Подтвердить");
+    const confirmBtn = el("button", "btn primary small", t("btn.confirm"));
     confirmBtn.onclick = () => confirmChat();
     actions.appendChild(confirmBtn);
   }
-  const cancelBtn = el("button", "btn ghost small", "Отмена");
+  const cancelBtn = el("button", "btn ghost small", t("btn.cancel"));
   cancelBtn.onclick = cancelChat;
   actions.appendChild(cancelBtn);
   card.appendChild(actions);
@@ -342,7 +352,7 @@ function renderIntentPreview(res) {
 async function confirmChat() {
   if (!CHAT_INTENT || !SELECTED) return;
   const result = document.getElementById("chat-result");
-  result.replaceChildren(el("div", "empty", "Исполняю (policy → simulation → …)…"));
+  result.replaceChildren(el("div", "empty", t("chat.executing")));
   const res = await api("/api/v1/agents/" + SELECTED + "/intent/confirm",
                         { method: "POST", body: { action: CHAT_INTENT.action, params: CHAT_INTENT.params } });
   result.replaceChildren();
@@ -352,12 +362,12 @@ async function confirmChat() {
   }
   const status = res.status || "unknown";
   const line = el("div", "status-line");
-  line.appendChild(el("span", "action", "Результат"));
+  line.appendChild(el("span", "action", t("label.result")));
   line.appendChild(el("span", "badge " + (status === "confirmed" ? "risk-low" : status === "pending" ? "risk-medium" : "risk-high"), status));
   result.appendChild(line);
-  if (res.tx_hash) result.appendChild(el("div", "params", "tx: " + res.tx_hash));
+  if (res.tx_hash) result.appendChild(el("div", "params", t("chat.tx") + ": " + res.tx_hash));
   if (res.error) result.appendChild(el("div", "warn-list", res.error));
-  if (status === "pending") { refreshPending(); toast("Отложено в окно undo", "info"); }
+  if (status === "pending") { refreshPending(); toast(t("toast.intent_pending"), "info"); }
 }
 
 function cancelChat() {
@@ -370,27 +380,27 @@ function renderStatusCard() {
   const card = document.getElementById("status-card");
   const agent = AGENTS.find((a) => a.id === SELECTED);
   document.getElementById("status-agent-name").textContent = agent ? agent.name : "—";
-  if (!agent) { card.replaceChildren(el("div", "empty", "Выберите агента")); return; }
+  if (!agent) { card.replaceChildren(el("div", "empty", t("empty.select_agent"))); return; }
   card.replaceChildren();
   const line1 = el("div", "status-line");
-  line1.appendChild(el("span", "muted", "Статус"));
+  line1.appendChild(el("span", "muted", t("label.status")));
   line1.appendChild(statusBadge(agent.status));
   card.appendChild(line1);
 
   const line2 = el("div", "status-line");
-  line2.appendChild(el("span", "muted", "Сеть"));
+  line2.appendChild(el("span", "muted", t("label.network")));
   line2.appendChild(el("span", "mono", "chain_id " + agent.chain_id));
   card.appendChild(line2);
 
   const line3 = el("div", "status-line");
-  line3.appendChild(el("span", "muted", "Кошелёк"));
-  line3.appendChild(el("span", "mono", agent.wallet_address || "не настроен"));
+  line3.appendChild(el("span", "muted", t("label.wallet")));
+  line3.appendChild(el("span", "mono", agent.wallet_address || t("label.wallet_missing")));
   card.appendChild(line3);
 
-  const hb = el("button", "btn small ghost", "♥ Heartbeat");
+  const hb = el("button", "btn small ghost", t("btn.heartbeat"));
   hb.onclick = async () => {
     const res = await api("/api/v1/agents/" + SELECTED + "/heartbeat", { method: "POST" });
-    toast(res.status === "ok" ? "Heartbeat отправлен" : (res.detail || "Агент не запущен"),
+    toast(res.status === "ok" ? t("toast.heartbeat_ok") : (res.detail || t("toast.heartbeat_fail")),
           res.status === "ok" ? "success" : "error");
   };
   card.appendChild(hb);
@@ -398,11 +408,11 @@ function renderStatusCard() {
 
 async function refreshFeed() {
   const feed = document.getElementById("decisions-feed");
-  if (!SELECTED) { feed.replaceChildren(el("div", "empty", "Выберите агента")); return; }
+  if (!SELECTED) { feed.replaceChildren(el("div", "empty", t("empty.select_agent"))); return; }
   const res = await api("/api/v1/agents/" + SELECTED + "/decisions?limit=30");
   const decisions = res.decisions || [];
   feed.replaceChildren();
-  if (!decisions.length) { feed.appendChild(el("div", "empty", "Решений пока нет")); return; }
+  if (!decisions.length) { feed.appendChild(el("div", "empty", t("empty.no_decisions"))); return; }
   decisions.forEach((d) => feed.appendChild(decisionCard(d)));
 }
 
@@ -417,7 +427,7 @@ function decisionCard(d) {
 
   card.appendChild(el("div", "reasoning", (d.reasoning || "—")));
 
-  const why = el("button", "why-btn", "Почему?");
+  const why = el("button", "why-btn", t("btn.why"));
   const details = el("div", "why-details");
   details.style.display = "none";
   const lines = [];
@@ -434,23 +444,23 @@ function decisionCard(d) {
 async function refreshPending() {
   const list = document.getElementById("pending-list");
   const count = document.getElementById("pending-count");
-  if (!SELECTED) { list.replaceChildren(el("div", "empty", "—")); count.textContent = "0"; return; }
+  if (!SELECTED) { list.replaceChildren(el("div", "empty", t("empty.none"))); count.textContent = "0"; return; }
   const res = await api("/api/v1/agents/" + SELECTED + "/pending");
   if (res.detail) { list.replaceChildren(el("div", "empty", res.detail)); count.textContent = "0"; return; }
   const items = res.pending || [];
   count.textContent = String(res.total || 0);
   list.replaceChildren();
-  if (!items.length) { list.appendChild(el("div", "empty", "Нет отложенных действий")); return; }
+  if (!items.length) { list.appendChild(el("div", "empty", t("empty.no_pending"))); return; }
   items.forEach((item) => {
     const row = el("div", "pending-item");
     const info = el("div");
     info.appendChild(el("div", null, item.action + " · до " + fmtTime(item.execute_after)));
     info.appendChild(el("div", "muted mono", "id " + item.id));
     row.appendChild(info);
-    const cancel = el("button", "btn small danger", "Отменить");
+    const cancel = el("button", "btn small danger", t("btn.cancel_pending"));
     cancel.onclick = async () => {
       const res2 = await api("/api/v1/agents/" + SELECTED + "/pending/" + item.id + "/cancel", { method: "POST" });
-      if (res2.status === "ok") { toast("Отменено", "success"); refreshPending(); }
+      if (res2.status === "ok") { toast(t("toast.cancelled"), "success"); refreshPending(); }
       else { toast(res2.detail || "Ошибка", "error"); }
     };
     row.appendChild(cancel);
@@ -461,13 +471,13 @@ async function refreshPending() {
 async function refreshAudit() {
   const list = document.getElementById("audit-list");
   const count = document.getElementById("audit-count");
-  if (!SELECTED) { list.replaceChildren(el("div", "empty", "—")); count.textContent = "0"; return; }
+  if (!SELECTED) { list.replaceChildren(el("div", "empty", t("empty.none"))); count.textContent = "0"; return; }
   const res = await api("/api/v1/agents/" + SELECTED + "/audit?limit=100");
   if (res.detail) { list.replaceChildren(el("div", "empty", res.detail)); count.textContent = "0"; return; }
   const events = res.events || [];
   count.textContent = String(res.total || 0);
   list.replaceChildren();
-  if (!events.length) { list.appendChild(el("div", "empty", "Событий пока нет")); return; }
+  if (!events.length) { list.appendChild(el("div", "empty", t("empty.no_events"))); return; }
   events.slice().reverse().forEach((e) => {
     const row = el("div", "audit-row");
     row.appendChild(el("span", "etype", e.event_type));
@@ -520,8 +530,8 @@ function onbPickTemplate(kind) {
     card.classList.toggle("selected", card.dataset.tpl === kind);
   });
   const goal = document.getElementById("onb-goal");
-  if (kind === "gas") goal.value = "Следить за газом и сообщать, когда он ниже 20 gwei";
-  else if (kind === "balance") goal.value = "Следить за балансом кошелька и предупреждать об изменениях";
+  if (kind === "gas") goal.value = t("onb.gas_goal");
+  else if (kind === "balance") goal.value = t("onb.balance_goal");
 }
 
 function renderOnbLimits() {
@@ -536,12 +546,12 @@ function renderOnbLimits() {
 }
 
 async function onbFinish() {
-  const goal = document.getElementById("onb-goal").value.trim() || "Наблюдать за состоянием сети";
+  const goal = document.getElementById("onb-goal").value.trim() || t("onb.default_goal");
   const res = await api("/api/v1/agents", {
     method: "POST",
     body: {
-      name: "Агент " + (TIER_INFO[ONB.tier] || TIER_INFO[0]).name,
-      description: "Создан мастером настройки",
+      name: t("onb.agent_name", { mode: (TIER_INFO[ONB.tier] || TIER_INFO[0]).name }),
+      description: t("onb.desc"),
       strategy: "monitoring",
       chain_id: 11155111,
       tier: ONB.tier,
@@ -550,7 +560,7 @@ async function onbFinish() {
   if (!res.id) { toast(res.detail || "Ошибка создания", "error"); return; }
   await api("/api/v1/agents/" + res.id + "/goal", { method: "POST", body: { goal } });
   closeOnboarding();
-  toast("Агент создан · режим " + (TIER_INFO[ONB.tier] || TIER_INFO[0]).name, "success");
+  toast(t("onb.created", { mode: (TIER_INFO[ONB.tier] || TIER_INFO[0]).name }), "success");
   await loadAgents();
   selectAgent(res.id);
 }
@@ -558,14 +568,14 @@ async function onbFinish() {
 /* ── Reports / CSV export (S4-07) ─────────────────────────────────── */
 async function refreshReport() {
   const box = document.getElementById("report-summary");
-  if (!SELECTED) { box.replaceChildren(el("div", "empty", "—")); return; }
+  if (!SELECTED) { box.replaceChildren(el("div", "empty", t("empty.none"))); return; }
   const res = await api("/api/v1/agents/" + SELECTED + "/reports/summary");
   if (res.detail) { box.replaceChildren(el("div", "empty", res.detail)); return; }
   box.replaceChildren();
   const lines = [
-    ["Решения", res.decisions_count],
-    ["Транзакции", res.transactions_count + " (confirmed: " + res.transactions_confirmed + ")"],
-    ["Газ (ETH)", res.gas_spent_eth],
+    [t("report.decisions"), res.decisions_count],
+    [t("report.transactions"), res.transactions_count + " (" + t("report.confirmed") + ": " + res.transactions_confirmed + ")"],
+    [t("report.gas"), res.gas_spent_eth],
   ];
   lines.forEach(([label, value]) => {
     const row = el("div", "status-line");
@@ -573,33 +583,33 @@ async function refreshReport() {
     row.appendChild(el("span", "mono", String(value)));
     box.appendChild(row);
   });
-  const pnl = el("div", "warn-list", "PnL: " + (res.pnl_available ? res.realized_pnl : (res.pnl_reason || "нет данных")));
+  const pnl = el("div", "warn-list", t("report.pnl") + ": " + (res.pnl_available ? res.realized_pnl : (res.pnl_reason || t("label.no_price_data"))));
   box.appendChild(pnl);
 }
 
 async function downloadCsv(dataset) {
-  if (!SELECTED) { toast("Выберите агента", "error"); return; }
+  if (!SELECTED) { toast(t("toast.select_agent"), "error"); return; }
   const resp = await fetch("/api/v1/agents/" + SELECTED + "/export.csv?dataset=" + dataset,
                            { headers: { Authorization: "Bearer " + TOKEN } });
-  if (!resp.ok) { toast("Ошибка экспорта", "error"); return; }
+  if (!resp.ok) { toast(t("toast.export_error"), "error"); return; }
   const blob = await resp.blob();
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
   link.download = "karta_" + dataset + ".csv";
   link.click();
   URL.revokeObjectURL(link.href);
-  toast("CSV: " + dataset, "success");
+  toast(t("toast.csv_done", { dataset }), "success");
 }
 
 /* ── Transactions drawer ──────────────────────────────────────────── */
 async function showTxPanel(agentId) {
   document.getElementById("tx-panel").classList.add("show");
   const list = document.getElementById("tx-list");
-  list.replaceChildren(el("div", "empty", "Загрузка…"));
+  list.replaceChildren(el("div", "empty", t("empty.loading")));
   const res = await api("/api/v1/agents/" + agentId + "/transactions");
   const txs = res.transactions || [];
   list.replaceChildren();
-  if (!txs.length) { list.appendChild(el("div", "empty", "Транзакций пока нет (исполнение — Phase 5)")); return; }
+  if (!txs.length) { list.appendChild(el("div", "empty", t("empty.no_tx"))); return; }
   txs.forEach((tx) => {
     const item = el("div", "audit-row");
     item.appendChild(el("span", "etype", tx.status + " · " + (tx.tx_hash || "—").slice(0, 14)));
