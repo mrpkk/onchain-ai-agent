@@ -37,6 +37,7 @@ from .models import (
     DecisionResponse,
     KillSwitchRequest,
     PendingListResponse,
+    PolicyFromTextResponse,
     PolicyPutRequest,
     PolicyResponse,
     PolicyValidateRequest,
@@ -56,10 +57,12 @@ from ..db import (AgentRepository, ApprovalRepository, DecisionRepository, Polic
                   TransactionRepository, UserRepository, create_all, session_scope)
 from ..runtime import TIER_POLICY_TEMPLATES, build_agent
 from ..runtime.approvals import resolve_approval
+from ..runtime.health_score import compute_health_score
 from ..runtime.reports import build_summary, decisions_csv, transactions_csv
 from ..runtime import manager as runtime_manager
 from ..security.dharma import PolicyError, TxContext, build_default_policy, compile_yaml, evaluate
 from ..agent.intent import parse_intent
+from ..agent.policy_intent import build_policy_yaml, parse_policy_rule
 from ..providers.llm import AllProvidersFailed
 from ..security.passwords import hash_password, verify_and_upgrade
 from ..security.tokens import (
@@ -492,7 +495,9 @@ async def agent_report_summary(
 ):
     async with session_scope() as session:
         agent = await _get_owned_agent(session, agent_id, current_user)
-        return await build_summary(session, agent.id)
+        summary = await build_summary(session, agent.id)
+        summary["health"] = await compute_health_score(session, agent.id)
+        return summary
 
 
 @app.get("/api/v1/agents/{agent_id}/export.csv")
@@ -728,6 +733,44 @@ async def list_audit_events(
             for e in events
         ]
     return AuditListResponse(events=items, total=len(items))
+
+
+# ── Policy from text: Intent→Guarantee (S4-10) ─────────────────────────
+
+@app.post("/api/v1/agents/{agent_id}/policy/from-text",
+          response_model=PolicyFromTextResponse)
+async def policy_from_text(
+    agent_id: str,
+    body: IntentRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+        policy_row = await PolicyRepository(session).get_active(agent.id)
+        base_yaml = policy_row.dsl_yaml if policy_row else None
+
+    try:
+        rule, _result = await parse_policy_rule(body.text)
+    except AllProvidersFailed as e:
+        raise HTTPException(status_code=503, detail=f"LLM unavailable: {e}")
+
+    if rule.rule_type == "noop" or rule.needs_clarification:
+        return PolicyFromTextResponse(
+            ok=True, summary=rule.summary, confidence=rule.confidence,
+            needs_clarification=True, questions=rule.questions,
+            warnings=["Нужны уточнения — правило не сформировано"],
+        )
+
+    try:
+        yaml_str, patch = build_policy_yaml(base_yaml, rule)
+    except PolicyError as e:
+        raise HTTPException(status_code=422, detail=f"Invalid rule: {e}")
+
+    return PolicyFromTextResponse(
+        ok=True, summary=rule.summary, confidence=rule.confidence,
+        patch=patch, dsl_yaml=yaml_str,
+        warnings=["Применение — отдельным подтверждением (PUT /policy)"],
+    )
 
 
 # ── Policy (Dharma DSL, SPEC S3-01) ────────────────────────────────────

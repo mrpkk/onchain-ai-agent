@@ -283,6 +283,7 @@ async function selectAgent(agentId) {
   SELECTED = agentId;
   document.getElementById("chat-preview").replaceChildren();
   document.getElementById("chat-result").replaceChildren();
+  document.getElementById("policy-preview").replaceChildren();
   renderAgents();
   renderStatusCard();
   await Promise.all([refreshFeed(), refreshPending(), refreshAudit(), refreshReport()]);
@@ -611,6 +612,63 @@ function approvalCard(item) {
   return card;
 }
 
+/* ── Intent→Guarantee: правило словами → патч политики (S4-10) ────── */
+let POLICY_PREVIEW = null;
+
+async function parsePolicyRule() {
+  if (!SELECTED) { toast(t("toast.select_agent"), "error"); return; }
+  const text = document.getElementById("policy-input").value.trim();
+  if (!text) { toast(t("toast.enter_task"), "error"); return; }
+  const box = document.getElementById("policy-preview");
+  box.replaceChildren(el("div", "empty", t("chat.parsing")));
+  const res = await api("/api/v1/agents/" + SELECTED + "/policy/from-text",
+                        { method: "POST", body: { text } });
+  if (!res.ok) {
+    box.replaceChildren(el("div", "empty", res.detail || res.error || t("chat.parse_error")));
+    return;
+  }
+  POLICY_PREVIEW = res;
+  renderPolicyPreview(res);
+}
+
+function renderPolicyPreview(res) {
+  const box = document.getElementById("policy-preview");
+  box.replaceChildren();
+  const card = el("div", "intent-card");
+  card.appendChild(el("div", "summary", res.summary || "—"));
+  if (res.needs_clarification) {
+    card.appendChild(el("div", "warn-list", t("label.clarify") + ": " + (res.questions || []).join("; ")));
+    box.appendChild(card);
+    return;
+  }
+  card.appendChild(el("div", "params", JSON.stringify(res.patch || {}, null, 2)));
+  if (res.dsl_yaml) card.appendChild(el("div", "params", res.dsl_yaml));
+  (res.warnings || []).forEach((w) => card.appendChild(el("div", "warn-list", w)));
+
+  const actions = el("div", "intent-actions");
+  const applyBtn = el("button", "btn primary small", t("policy.apply"));
+  applyBtn.onclick = () => applyPolicyRule();
+  const cancelBtn = el("button", "btn ghost small", t("btn.cancel"));
+  cancelBtn.onclick = () => { POLICY_PREVIEW = null; box.replaceChildren(); };
+  actions.append(applyBtn, cancelBtn);
+  card.appendChild(actions);
+  box.appendChild(card);
+}
+
+async function applyPolicyRule() {
+  if (!POLICY_PREVIEW || !POLICY_PREVIEW.dsl_yaml || !SELECTED) return;
+  const res = await api("/api/v1/agents/" + SELECTED + "/policy",
+                        { method: "PUT", body: { dsl_yaml: POLICY_PREVIEW.dsl_yaml } });
+  if (res.id || res.version) {
+    toast(t("policy.applied") + " · v" + res.version, "success");
+    POLICY_PREVIEW = null;
+    document.getElementById("policy-preview").replaceChildren();
+    document.getElementById("policy-input").value = "";
+  } else {
+    toast(res.detail || t("toast.error"), "error");
+  }
+}
+
 /* ── Reports / CSV export (S4-07) ─────────────────────────────────── */
 async function refreshReport() {
   const box = document.getElementById("report-summary");
@@ -629,6 +687,15 @@ async function refreshReport() {
     row.appendChild(el("span", "mono", String(value)));
     box.appendChild(row);
   });
+  if (res.health) {
+    const h = el("div", "status-line");
+    h.appendChild(el("span", "muted", t("report.health")));
+    const bandClass = res.health.band === "healthy" ? "risk-low" : res.health.band === "degraded" ? "risk-medium" : "risk-high";
+    const badge = el("span", "badge " + bandClass, res.health.score + " · " + t("band." + res.health.band));
+    h.appendChild(badge);
+    box.appendChild(h);
+    if (res.health.recommendation) box.appendChild(el("div", "warn-list", res.health.recommendation));
+  }
   const pnl = el("div", "warn-list", t("report.pnl") + ": " + (res.pnl_available ? res.realized_pnl : (res.pnl_reason || t("label.no_price_data"))));
   box.appendChild(pnl);
 }

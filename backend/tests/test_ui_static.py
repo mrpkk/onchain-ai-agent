@@ -54,6 +54,8 @@ def test_static_assets_served(client):
         ("/static/dashboard.js", "downloadCsv"),
         ("/static/dashboard.js", "refreshApprovals"),
         ("/static/dashboard.js", "approvalCard"),
+        ("/static/dashboard.js", "parsePolicyRule"),
+        ("/static/dashboard.js", "applyPolicyRule"),
         ("/static/dashboard.js", "refreshReport"),
         ("/static/dashboard.css", ".onb-card"),
         ("/static/manifest.webmanifest", "KARTA"),
@@ -76,7 +78,8 @@ def test_dashboard_ids_present(client):
                        "goal-modal", "tx-panel", "toast", "chat-input",
                        "chat-preview", "chat-result", "onboarding-modal",
                        "onb-step-1", "onb-step-3", "report-summary",
-                       "approvals-list", "approvals-count"):
+                       "approvals-list", "approvals-count", "policy-input",
+                       "policy-preview"):
         assert f'id="{element_id}"' in body, element_id
 
 

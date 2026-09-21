@@ -106,6 +106,16 @@
     </section>
 
     <section class="panel">
+      <div class="panel-head"><h3 data-i18n="panel.policy">Правила (Dharma)</h3></div>
+      <div class="muted" style="margin-bottom:8px;font-size:.74rem" data-i18n="policy.hint">Правило словами → патч политики (применение — отдельным подтверждением)</div>
+      <div class="chat-row">
+        <input id="policy-input" placeholder="Не трать больше 0.05 ETH в день" data-i18n-placeholder="policy.text_ph">
+        <button class="btn primary small" onclick="parsePolicyRule()" data-i18n="policy.parse">Разобрать</button>
+      </div>
+      <div id="policy-preview" class="chat-preview"></div>
+    </section>
+
+    <section class="panel">
       <div class="panel-head"><h3 data-i18n="panel.reports">Отчёты</h3><button class="btn ghost small" onclick="refreshReport()" data-i18n="btn.refresh">Обновить</button></div>
       <div id="report-summary" class="status-card"><div class="empty">—</div></div>
       <div class="intent-actions" style="margin-top:10px">

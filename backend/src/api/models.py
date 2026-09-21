@@ -244,3 +244,16 @@ class ApprovalResponse(BaseModel):
 class ApprovalListResponse(BaseModel):
     approvals: list[ApprovalResponse]
     total: int
+
+
+# ── Policy from text (S4-10 Intent→Guarantee) ─────────────────────────
+
+class PolicyFromTextResponse(BaseModel):
+    ok: bool
+    summary: str = ""
+    confidence: float = 0.0
+    patch: dict = Field(default_factory=dict)
+    dsl_yaml: Optional[str] = None
+    needs_clarification: bool = False
+    questions: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
