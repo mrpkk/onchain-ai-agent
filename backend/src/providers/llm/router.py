@@ -16,6 +16,7 @@ from typing import Optional, Sequence
 
 from pydantic import BaseModel, ValidationError
 
+from ...observability import tracer
 from .base import LLMProvider, LLMResult, ProviderError
 from .gigachat import GigaChatProvider
 from .openai_compat import OpenAICompatibleProvider
@@ -89,9 +90,12 @@ class LLMRouter:
 
     async def complete_json(self, system: str, user: str,
                             schema: type[BaseModel], *,
-                            temperature: float = 0.3) -> tuple[BaseModel, LLMResult]:
-        """Возвращает (валидированная модель, результат вызова)."""
+                            temperature: float = 0.3,
+                            agent_id: Optional[str] = None,
+                            prompt_version: str = "") -> tuple[BaseModel, LLMResult]:
+        """Возвращает (валидированная модель, результат вызова) + трейс S2-06."""
         errors: dict[str, str] = {}
+        request_id = tracer.new_request_id()
         for provider in self.providers:
             breaker = self._breakers[provider.name]
             if not breaker.allow():
@@ -127,8 +131,24 @@ class LLMRouter:
                     break
 
                 breaker.on_success()
+                cost = tracer.estimate_cost(result.provider, result.tokens_prompt,
+                                            result.tokens_completion)
+                result.request_id = request_id
+                result.cost_usd = cost
+                tracer.log_llm_trace(
+                    request_id=request_id, agent_id=agent_id, provider=result.provider,
+                    model=result.model, latency_ms=result.latency_ms,
+                    tokens_prompt=result.tokens_prompt,
+                    tokens_completion=result.tokens_completion, cost_usd=cost,
+                    prompt_version=prompt_version, ok=True,
+                )
                 return parsed, result
 
+        tracer.log_llm_trace(
+            request_id=request_id, agent_id=agent_id, provider="none", model="",
+            latency_ms=0, tokens_prompt=None, tokens_completion=None, cost_usd=None,
+            prompt_version=prompt_version, ok=False, error=str(errors)[:300],
+        )
         raise AllProvidersFailed(errors)
 
 

@@ -18,6 +18,8 @@ class LLMResult:
     tokens_prompt: Optional[int] = None
     tokens_completion: Optional[int] = None
     attempts: int = 1
+    request_id: str = ""
+    cost_usd: Optional[float] = None
 
 
 class ProviderError(Exception):

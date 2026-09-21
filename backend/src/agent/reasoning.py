@@ -29,6 +29,8 @@ GIGACHAT_AUTH_KEY = os.getenv("GIGACHAT_AUTH_KEY", "")
 
 logger = logging.getLogger("agent.reasoning")
 
+PROMPT_VERSION = "1.0"
+
 
 @dataclass
 class AgentDecision:
@@ -116,13 +118,15 @@ class LLMReasoner:
     """
 
     def __init__(self, api_key: Optional[str] = None, model: str = "mistral-small-latest",
-                 base_url: str = "https://api.mistral.ai/v1", router=None):
+                 base_url: str = "https://api.mistral.ai/v1", router=None,
+                 agent_id: Optional[str] = None):
         # api_key/model/base_url сохранены для совместимости конструктора;
         # фактическая цепочка — LLMRouter (build_default_router из окружения).
         self.api_key = api_key or os.getenv("MISTRAL_API_KEY", "")
         self.model = model
         self.base_url = base_url
         self._router = router
+        self._agent_id = agent_id
         self._decision_history: list[AgentDecision] = []
 
     def _get_router(self):
@@ -140,6 +144,7 @@ class LLMReasoner:
             router = self._get_router()
             parsed, result = await router.complete_json(
                 SYSTEM_PROMPT, user_msg, AgentDecisionSchema, temperature=temperature,
+                agent_id=self._agent_id, prompt_version=PROMPT_VERSION,
             )
             decision = AgentDecision(
                 action=parsed.action,

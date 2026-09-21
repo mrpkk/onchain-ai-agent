@@ -102,6 +102,7 @@ class OnChainAgent:
             api_key=config.ai_api_key,
             model=config.ai_model,
             base_url=config.ai_base_url,
+            agent_id=self.agent_id,
         )
         self.planner = AgentPlanner()
         self.risk_assessor = RiskAssessor()
