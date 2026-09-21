@@ -84,8 +84,8 @@
 - [x] S2-04 Redis — решение: **NOT_REQUIRED для одно-процессного v2** (WS fan-out — in-process ConnectionManager; rate-limit — in-memory SlidingWindowLimiter; кэш цен — TTL в perception). Redis остаётся кандидатом для multi-worker (WS pub/sub, общий rate-limit) — сервис в compose переведён в профиль `optional` (`docker compose --profile optional up`). Health остаётся честным (системный Redis на 6379 отображается ok; если Redis нужен — поднимаем из профиля).
 - [x] S2-05 LLMProvider-цепочка: пакет `providers/llm/` — `base.py` (LLMProvider/LLMResult/ProviderError с retryable-классификацией), `gigachat.py` (OAuth + кэш токена + 401-инвалидация), `openai_compat.py` (DeepSeek/Qwen/агрегаторы/Ollama, маппинг HTTP 429/5xx→retryable), `router.py` (fallback по цепочке **GigaChat→DeepSeek→Qwen→агрегатор→Ollama**, circuit breaker 3×60с, repair-попытка при invalid JSON, `extract_json` из ```-блоков). `reasoning.py` переведён на роутер: pydantic `AgentDecisionSchema` (Literal-поля, confidence 0..1) → `AgentDecision`; полный отказ → fail-safe `ask_human` (critical). Сборка цепочки из env: `build_default_router()` (проверено: `['gigachat','deepseek']`). Трейсинг-lite: provider/model/latency/tokens в `LLMResult` + структурный лог решения. 11 тестов (fallback, repair, breaker, HTTP-маппинг, GigaChat-кэш токена, fail-safe). Коммит `5592952`. Остаток S2-06: request_id/agent_id/cost/prompt-version.
 - [ ] S2-06 Трейсинг решений: request_id/agent_id/latency/tokens/cost/prompt-version
-- [ ] S2-07 MempoolMonitor: реальный (pending-tx + gas-тренд) или честно NOT_IMPLEMENTED
-- [ ] S2-08 README=код: таблица эндпоинтов из OpenAPI
+- [x] S2-07 MempoolMonitor: **реальный** сканер блоков — watch-фильтр адресов (from/to), газ-тренд по baseFee (up/down/flat), история, `scan_once` c честным `rpc_unavailable`, `status()` для capabilities. Фейковый/битый цикл (`range(bool and len())`) заменён. 6 тестов на fake-w3. Коммит `24b83bd`.
+- [x] S2-08 README = код: честный ре-райт (18 маршрутов + WS сверены с приложением; статусы фич «работает/нет»; quickstart с PG 5433 + Alembic; env-таблица; тесты 116+56; архитектурная схема; дисклеймер). Коммит `ccafcd0`.
 
 ### P3 — Policy и Simulation
 - [ ] S3-01 Dharma DSL YAML + валидатор + вердикты в UI
@@ -141,6 +141,8 @@ F1 Gasless ERC-4337 · F2 Digital twin · F3 Copilot · F4 Intent-engine · F5 �
 | 14 | 2026-09-18 | S2-02 Sakshi Log: HMAC-аудит + Decision Diary + export + PG-триггер | `6395865` | 94/94 (вкл. PG-триггер) | запись активируется через `db_agent_id`+`sakshi` |
 | 15 | 2026-09-18 | S2-03 WebSocket live-events + core event_sink + Settings.extra=ignore | `d433748` | 99/99 | fan-out на несколько клиентов; decision.proposed из ядра |
 | 16 | 2026-09-18 | S2-05 LLMProvider-цепочка + structured output + breaker | `5592952` | 110/110 | chain=[gigachat,deepseek]; repair/breaker покрыты тестами |
+| 17 | 2026-09-18 | S2-07 Mempool: реальный сканер + газ-тренд + честный rpc_unavailable | `24b83bd` | 116/116 | битый цикл заменён |
+| 18 | 2026-09-18 | S2-08 README=код (сверен с роутами приложения) | `ccafcd0` | 116/116 | P2 закрыта 7/8 (+S2-06 частично) |
 
 ## 💡 ИДЕИ НА ОБСУЖДЕНИЕ (новое — предлагать после отчётов)
 
