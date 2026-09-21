@@ -10,7 +10,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Awaitable, Callable, Optional
 
 from web3 import Web3
 
@@ -92,7 +92,8 @@ class OnChainAgent:
                  key_alias: str = "agent_wallet",
                  policy: Optional[CompiledPolicy] = None,
                  db_agent_id: Optional[uuid.UUID] = None,
-                 sakshi: Optional[SakshiLog] = None):
+                 sakshi: Optional[SakshiLog] = None,
+                 event_sink: Optional[Callable[[dict], Awaitable[None]]] = None):
         self.config = config
         self.agent_id = f"agent_{config.name.lower().replace(' ', '_')}"
 
@@ -120,6 +121,7 @@ class OnChainAgent:
         self._revert_streak = 0
         self._db_agent_id = db_agent_id
         self._sakshi = sakshi
+        self._event_sink = event_sink
 
         self.state = AgentState(
             agent_id=self.agent_id,
@@ -199,6 +201,15 @@ class OnChainAgent:
         })
         return verdict
 
+    async def _emit(self, event: dict) -> None:
+        """Публикация live-события (WS). Ошибки sink не ломают агента."""
+        if self._event_sink is None:
+            return
+        try:
+            await self._event_sink(event)
+        except Exception as e:
+            logger.warning("Event sink error: %s", e)
+
     async def _sakshi_append(self, event_type: str, payload: dict, actor: str = "agent") -> None:
         """Запись события в Sakshi Log (если подключены БД-агент и аудит)."""
         if self._sakshi is None or self._db_agent_id is None:
@@ -211,7 +222,14 @@ class OnChainAgent:
             logger.error("Sakshi: не удалось записать событие %s: %s", event_type, e)
 
     async def _persist_decision(self, decision: AgentDecision, verdict=None) -> None:
-        """Decision Diary: запись решения агента (тезис ДО) в decisions."""
+        """Decision Diary: событие в WS + запись решения агента (тезис ДО) в decisions."""
+        await self._emit({
+            "type": "decision.proposed",
+            "agent_id": str(self._db_agent_id) if self._db_agent_id else self.agent_id,
+            "action": decision.action,
+            "confidence": decision.confidence,
+            "risk_level": decision.risk_level,
+        })
         if self._db_agent_id is None:
             return
         try:

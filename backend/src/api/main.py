@@ -43,6 +43,8 @@ from ..security.tokens import (
 )
 from .health import collect_health
 from .ratelimit import SlidingWindowLimiter
+from .ws import manager as ws_manager
+from .ws import router as ws_router
 
 settings = get_settings()
 
@@ -99,6 +101,8 @@ app = FastAPI(
     docs_url="/docs",
     openapi_url="/openapi.json",
 )
+
+app.include_router(ws_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -330,6 +334,8 @@ async def start_agent(
             raise HTTPException(status_code=409, detail="Agent has been killed")
         await AgentRepository(session).set_status(agent, AgentStatus.RUNNING.value)
         response = _agent_to_response(agent)
+    await ws_manager.broadcast({"type": "agent.status", "agent_id": str(agent.id),
+                                "status": AgentStatus.RUNNING.value})
     return response
 
 
@@ -344,6 +350,8 @@ async def stop_agent(
             raise HTTPException(status_code=409, detail="Agent is not running")
         await AgentRepository(session).set_status(agent, AgentStatus.STOPPED.value)
         response = _agent_to_response(agent)
+    await ws_manager.broadcast({"type": "agent.status", "agent_id": str(agent.id),
+                                "status": AgentStatus.STOPPED.value})
     return response
 
 
@@ -371,6 +379,8 @@ async def kill_switch(
         agent.config = {**(agent.config or {}), "kill_reason": body.reason}
         await AgentRepository(session).set_status(agent, AgentStatus.KILLED.value)
         response = _agent_to_response(agent)
+    await ws_manager.broadcast({"type": "agent.status", "agent_id": str(agent.id),
+                                "status": AgentStatus.KILLED.value, "reason": body.reason})
     return response
 
 
