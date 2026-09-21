@@ -38,8 +38,12 @@ def test_root_serves_cockpit(client):
 def test_static_assets_served(client):
     for path, needle in (
         ("/static/tokens.css", "--bg-primary"),
-        ("/static/dashboard.css", ".agent-row"),
+        ("/static/dashboard.css", ".decision-card"),
+        ("/static/dashboard.css", '.badge[data-state="live"]'),
         ("/static/dashboard.js", "getElementById"),
+        ("/static/dashboard.js", "new WebSocket"),
+        ("/static/dashboard.js", "decision.proposed"),
+        ("/static/dashboard.js", "Почему?"),
         ("/static/manifest.webmanifest", "KARTA"),
     ):
         response = client.get(path)

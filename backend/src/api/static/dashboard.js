@@ -1,258 +1,401 @@
-/* KARTA dashboard — vanilla JS, XSS-safe, без npm (S4-01). */
+/* KARTA Cockpit — vanilla JS (S4-02): XSS-safe (textContent), WS-live, без npm. */
+"use strict";
 
-// ── State ──
-let TOKEN = localStorage.getItem('onchain_token') || '';
-let USERNAME = localStorage.getItem('onchain_user') || '';
+let TOKEN = localStorage.getItem("karta_token") || localStorage.getItem("onchain_token") || "";
+let USERNAME = localStorage.getItem("karta_user") || localStorage.getItem("onchain_user") || "";
 let AGENTS = [];
-let TX_AGENT_ID = '';
+let SELECTED = null;
+let WS = null;
+let WS_RETRY = null;
 
-// ── Init ──
 if (TOKEN) { showDashboard(); }
 
-function api(url, opts={}) {
+/* ── API / UI helpers ─────────────────────────────────────────────── */
+function api(url, opts = {}) {
   opts.headers = opts.headers || {};
-  if (TOKEN) opts.headers['Authorization'] = 'Bearer ' + TOKEN;
-  if (opts.body && typeof opts.body === 'object' && !(opts.body instanceof FormData)) {
+  if (TOKEN) opts.headers["Authorization"] = "Bearer " + TOKEN;
+  if (opts.body && typeof opts.body === "object" && !(opts.body instanceof FormData)) {
     opts.body = JSON.stringify(opts.body);
-    opts.headers['Content-Type'] = 'application/json';
+    opts.headers["Content-Type"] = "application/json";
   }
-  return fetch(url, opts).then(r => r.json().catch(() => ({error:r.statusText})));
+  return fetch(url, opts).then((r) => r.json().catch(() => ({ error: r.statusText })));
 }
 
-function toast(msg, type='info') {
-  const t = document.getElementById('toast');
-  t.textContent = msg; t.className = 'toast ' + type;
-  setTimeout(() => t.classList.add('show'), 10);
-  setTimeout(() => t.classList.remove('show'), 3000);
+function toast(msg, type = "info") {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.className = "toast " + type;
+  setTimeout(() => el.classList.add("show"), 10);
+  setTimeout(() => el.classList.remove("show"), 3200);
 }
 
-// ── Auth ──
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined && text !== null) node.textContent = String(text);
+  return node;
+}
+
+function fmtTime(iso) {
+  if (!iso) return "—";
+  try { return new Date(iso).toLocaleString("ru-RU", { hour12: false }); } catch (e) { return iso; }
+}
+
+function statusBadge(status) {
+  const b = el("span", "badge status-" + status, status);
+  return b;
+}
+
+function riskBadge(level) {
+  return el("span", "badge risk-" + (level || "medium"), "risk: " + (level || "—"));
+}
+
+function confBar(confidence) {
+  const wrap = el("span", "conf-bar");
+  const fill = el("span");
+  const value = Math.max(0, Math.min(1, Number(confidence) || 0));
+  fill.style.width = (value * 100).toFixed(0) + "%";
+  wrap.appendChild(fill);
+  return wrap;
+}
+
+/* ── Auth ─────────────────────────────────────────────────────────── */
 function switchAuth(tab) {
-  document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
-  if (tab==='login') {
-    document.querySelector('.auth-tab').classList.add('active');
-    document.getElementById('login-form').classList.add('active');
+  document.querySelectorAll(".auth-tab").forEach((t) => t.classList.remove("active"));
+  document.querySelectorAll(".auth-form").forEach((f) => f.classList.remove("active"));
+  if (tab === "login") {
+    document.querySelectorAll(".auth-tab")[0].classList.add("active");
+    document.getElementById("login-form").classList.add("active");
   } else {
-    document.querySelectorAll('.auth-tab')[1].classList.add('active');
-    document.getElementById('register-form').classList.add('active');
+    document.querySelectorAll(".auth-tab")[1].classList.add("active");
+    document.getElementById("register-form").classList.add("active");
   }
 }
 
 async function doLogin() {
-  const username = document.getElementById('login-username').value.trim();
-  const password = document.getElementById('login-password').value.trim();
-  if (!username || !password) { document.getElementById('login-error').textContent = 'Заполните все поля'; return; }
-  document.getElementById('login-error').textContent = '⏳ Вход...';
-  const res = await api('/api/v1/auth/token', {method:'POST', body:{username, password}});
+  const username = document.getElementById("login-username").value.trim();
+  const password = document.getElementById("login-password").value.trim();
+  const err = document.getElementById("login-error");
+  if (!username || !password) { err.textContent = "Заполните все поля"; return; }
+  err.textContent = "Вход…";
+  const res = await api("/api/v1/auth/token", { method: "POST", body: { username, password } });
   if (res.access_token) {
     TOKEN = res.access_token; USERNAME = username;
-    localStorage.setItem('onchain_token', TOKEN);
-    localStorage.setItem('onchain_user', USERNAME);
+    localStorage.setItem("karta_token", TOKEN);
+    localStorage.setItem("karta_user", USERNAME);
     showDashboard();
   } else {
-    document.getElementById('login-error').textContent = res.detail || 'Ошибка входа';
+    err.textContent = res.detail || "Ошибка входа";
   }
 }
 
 async function doRegister() {
-  const username = document.getElementById('reg-username').value.trim();
-  const password = document.getElementById('reg-password').value.trim();
-  if (!username || !password) { document.getElementById('reg-error').textContent = 'Заполните все поля'; return; }
-  document.getElementById('reg-error').textContent = '⏳ Регистрация...';
-  const res = await api('/api/v1/auth/register', {method:'POST', body:{username, password}});
+  const username = document.getElementById("reg-username").value.trim();
+  const password = document.getElementById("reg-password").value.trim();
+  const err = document.getElementById("reg-error");
+  if (!username || !password) { err.textContent = "Заполните все поля"; return; }
+  err.textContent = "Регистрация…";
+  const res = await api("/api/v1/auth/register", { method: "POST", body: { username, password } });
   if (res.id) {
-    toast('✅ Аккаунт создан! Теперь войдите.', 'success');
-    switchAuth('login');
-    document.getElementById('login-username').value = username;
-    document.getElementById('login-password').value = password;
+    toast("Аккаунт создан — входим", "success");
+    switchAuth("login");
+    document.getElementById("login-username").value = username;
+    document.getElementById("login-password").value = password;
     doLogin();
   } else {
-    document.getElementById('reg-error').textContent = res.detail || 'Ошибка регистрации';
+    err.textContent = res.detail || "Ошибка регистрации";
   }
 }
 
 function doLogout() {
-  TOKEN = ''; USERNAME = '';
-  localStorage.removeItem('onchain_token');
-  localStorage.removeItem('onchain_user');
-  document.getElementById('dash-screen').style.display = 'none';
-  document.getElementById('auth-screen').style.display = 'flex';
+  if (WS) { WS.onclose = null; WS.close(); WS = null; }
+  TOKEN = ""; USERNAME = ""; SELECTED = null;
+  localStorage.removeItem("karta_token");
+  localStorage.removeItem("karta_user");
+  document.getElementById("dash-screen").style.display = "none";
+  document.getElementById("auth-screen").style.display = "flex";
   hideTxPanel();
 }
 
-// ── Dashboard ──
 function showDashboard() {
-  document.getElementById('auth-screen').style.display = 'none';
-  document.getElementById('dash-screen').style.display = 'block';
-  document.getElementById('dash-username').textContent = '👤 ' + USERNAME;
+  document.getElementById("auth-screen").style.display = "none";
+  document.getElementById("dash-screen").style.display = "block";
+  document.getElementById("dash-username").textContent = USERNAME;
   loadAgents();
+  connectWS();
 }
 
+/* ── WebSocket (live) ─────────────────────────────────────────────── */
+function setWsBadge(state) {
+  const badge = document.getElementById("ws-status");
+  badge.dataset.state = state;
+  badge.textContent = state === "live" ? "WS LIVE" : "WS OFFLINE";
+}
+
+function connectWS() {
+  if (!TOKEN) return;
+  try {
+    WS = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws?token=" + encodeURIComponent(TOKEN));
+  } catch (e) { setWsBadge("offline"); return; }
+  WS.onopen = () => setWsBadge("live");
+  WS.onmessage = (event) => {
+    let data = null;
+    try { data = JSON.parse(event.data); } catch (e) { return; }
+    handleWsEvent(data);
+  };
+  WS.onclose = () => {
+    setWsBadge("offline");
+    if (TOKEN) { clearTimeout(WS_RETRY); WS_RETRY = setTimeout(connectWS, 3000); }
+  };
+  WS.onerror = () => setWsBadge("offline");
+}
+
+function handleWsEvent(data) {
+  if (data.type === "hello") { setWsBadge("live"); return; }
+  if (data.type === "agent.status") {
+    const agent = AGENTS.find((a) => a.id === data.agent_id);
+    if (agent) { agent.status = data.status; renderAgents(); }
+    if (SELECTED && SELECTED === data.agent_id) { renderStatusCard(); refreshPending(); }
+    toast("Агент: " + data.status, data.status === "killed" ? "error" : "info");
+    return;
+  }
+  if (data.type === "decision.proposed") {
+    if (SELECTED && data.agent_id === SELECTED) refreshFeed();
+    toast("Решение: " + data.action + " (уверенность " + Math.round((data.confidence || 0) * 100) + "%)", "info");
+    return;
+  }
+  if (data.type === "action.scheduled") {
+    if (SELECTED && data.agent_id === SELECTED) refreshPending();
+    toast("Действие отложено (окно undo)", "info");
+  }
+}
+
+/* ── Agents ───────────────────────────────────────────────────────── */
 async function loadAgents() {
-  const list = document.getElementById('agent-list');
-  list.innerHTML = '<div class="agent-empty">⏳ Загрузка агентов...</div>';
-  const res = await api('/api/v1/agents');
+  const list = document.getElementById("agent-list");
+  list.replaceChildren(el("div", "empty", "Загрузка…"));
+  const res = await api("/api/v1/agents");
   AGENTS = res.agents || [];
   renderAgents();
-  updateStats();
-}
-
-function updateStats() {
-  const total = AGENTS.length;
-  const running = AGENTS.filter(a => a.status === 'running').length;
-  const created = AGENTS.filter(a => a.status === 'created').length;
-  const stopped = AGENTS.filter(a => a.status === 'stopped').length;
-  const killed = AGENTS.filter(a => a.status === 'killed').length;
-  document.getElementById('stat-total').textContent = total;
-  document.getElementById('stat-running').textContent = running;
-  document.getElementById('stat-created').textContent = created;
-  document.getElementById('stat-stopped').textContent = stopped;
-  document.getElementById('stat-killed').textContent = killed;
-}
-
-function statusColor(s) {
-  return s==='running' ? '#3fb950' : s==='created' ? '#8b949e' : s==='stopped' ? '#d29922' : '#f85149';
-}
-function statusLabel(s) {
-  return s==='running' ? '✅ Активен' : s==='created' ? '⏳ Создан' : s==='stopped' ? '⏸️ Остановлен' : '☠️ Убит';
+  if (AGENTS.length && !SELECTED) selectAgent(AGENTS[0].id);
 }
 
 function renderAgents() {
-  const list = document.getElementById('agent-list');
+  const list = document.getElementById("agent-list");
+  list.replaceChildren();
   if (!AGENTS.length) {
-    list.innerHTML = '<div class="agent-empty">🤖 Нет агентов. Создайте первого!</div>';
+    list.appendChild(el("div", "empty", "Пока нет агентов — создайте первого"));
     return;
   }
-  list.innerHTML = AGENTS.map(a => {
-    const c = statusColor(a.status);
-    const l = statusLabel(a.status);
-    const isRunning = a.status === 'running';
-    const isKilled = a.status === 'killed';
-    return `<div class="agent-row">
-      <div class="agent-info">
-        <div class="name"><span class="status-dot" style="background:${c}"></span>${a.name}</div>
-        <div class="meta">
-          <span>${l}</span>
-          <span>🔗 Chain ${a.chain_id}</span>
-          <span>📋 ${a.strategy}</span>
-          <span>⏱️ ${new Date(a.created_at).toLocaleString()}</span>
-          ${a.goal ? '<span>🎯 ' + a.goal.slice(0, 40) + (a.goal.length>40?'...':'') + '</span>' : ''}
-        </div>
-      </div>
-      <div class="agent-actions">
-        ${!isRunning && !isKilled ? `<button class="start-btn" onclick="doAction('${a.id}','start')">▶️ Запустить</button>` : ''}
-        ${isRunning ? `<button class="stop-btn" onclick="doAction('${a.id}','stop')">⏸️ Стоп</button>` : ''}
-        ${!isKilled ? `<button class="kill-btn" onclick="doAction('${a.id}','kill')">☠️ Kill</button>` : ''}
-        <button class="goal-btn" onclick="showGoalModal('${a.id}')">🎯 Цель</button>
-        <button class="tx-btn" onclick="showTx('${a.id}')">📋 TX</button>
-      </div>
-    </div>`;
-  }).join('');
+  AGENTS.forEach((agent) => {
+    const row = el("div", "agent-row" + (SELECTED === agent.id ? " selected" : ""));
+    const head = el("div", "name");
+    head.appendChild(el("span", null, agent.name));
+    head.appendChild(statusBadge(agent.status));
+    row.appendChild(head);
+    row.appendChild(el("div", "meta", "chain_id " + agent.chain_id + " · " + (agent.strategy || "default")));
+    row.onclick = () => selectAgent(agent.id);
+
+    const actions = el("div", "agent-actions");
+    const startBtn = el("button", "btn small", "▶ Старт");
+    startBtn.onclick = (e) => { e.stopPropagation(); agentAction(agent.id, "start"); };
+    const stopBtn = el("button", "btn small ghost", "⏸ Стоп");
+    stopBtn.onclick = (e) => { e.stopPropagation(); agentAction(agent.id, "stop"); };
+    const killBtn = el("button", "btn small danger", "☠ Kill");
+    killBtn.onclick = (e) => { e.stopPropagation(); killAgent(agent.id); };
+    const goalBtn = el("button", "btn small ghost", "🎯 Цель");
+    goalBtn.onclick = (e) => { e.stopPropagation(); showGoalModal(agent.id); };
+    const txBtn = el("button", "btn small ghost", "📋 Tx");
+    txBtn.onclick = (e) => { e.stopPropagation(); showTxPanel(agent.id); };
+    actions.append(startBtn, stopBtn, killBtn, goalBtn, txBtn);
+    row.appendChild(actions);
+    list.appendChild(row);
+  });
 }
 
-async function doAction(id, action) {
-  let url = `/api/v1/agents/${id}/${action}`;
-  if (action === 'kill') { url = `/api/v1/agents/${id}/kill-switch`; }
-  let body = undefined;
-  if (action === 'kill') body = {reason:'Manual kill via dashboard'};
-  const res = await api(url, {method:'POST', body});
-  if (res.id) {
-    toast(action === 'start' ? '✅ Агент запущен' : action === 'stop' ? '⏸️ Агент остановлен' : '☠️ Kill Switch активирован', 'success');
-    loadAgents();
-  } else {
-    toast('❌ Ошибка: ' + (res.detail || JSON.stringify(res)), 'error');
-  }
+async function agentAction(agentId, action) {
+  const res = await api("/api/v1/agents/" + agentId + "/" + action, { method: "POST" });
+  if (res.id) { toast("Статус: " + res.status, "success"); await loadAgents(); }
+  else { toast(res.detail || "Ошибка", "error"); }
 }
 
-// ── Create Modal ──
-function showCreateModal() {
-  document.getElementById('create-modal').classList.add('show');
-  document.getElementById('new-name').value = '';
-  document.getElementById('new-desc').value = '';
-  document.getElementById('new-strategy').value = 'default';
-  document.getElementById('new-chain').value = '1';
-  setTimeout(() => document.getElementById('new-name').focus(), 100);
+async function killAgent(agentId) {
+  if (!confirm("Экстренная остановка (hard kill). Продолжить?")) return;
+  const res = await api("/api/v1/agents/" + agentId + "/kill-switch", { method: "POST", body: { reason: "cockpit" } });
+  if (res.id) { toast("Kill switch: агент остановлен", "error"); await loadAgents(); }
+  else { toast(res.detail || "Ошибка", "error"); }
 }
-function hideCreateModal() { document.getElementById('create-modal').classList.remove('show'); }
+
+function showCreateModal() { document.getElementById("create-modal").classList.add("show"); }
+function hideCreateModal() { document.getElementById("create-modal").classList.remove("show"); }
 
 async function createAgent() {
-  const name = document.getElementById('new-name').value.trim();
-  const desc = document.getElementById('new-desc').value.trim();
-  if (!name) { toast('Введите имя агента', 'error'); return; }
-  const res = await api('/api/v1/agents', {method:'POST', body:{
+  const name = document.getElementById("new-name").value.trim();
+  if (!name) { toast("Укажите имя", "error"); return; }
+  const body = {
     name,
-    description: desc,
-    strategy: document.getElementById('new-strategy').value,
-    chain_id: parseInt(document.getElementById('new-chain').value),
-    config: {}
-  }});
+    description: document.getElementById("new-desc").value.trim(),
+    strategy: document.getElementById("new-strategy").value,
+    chain_id: Number(document.getElementById("new-chain").value),
+  };
+  const res = await api("/api/v1/agents", { method: "POST", body });
   if (res.id) {
-    toast('✅ Агент ' + name + ' создан!', 'success');
     hideCreateModal();
-    loadAgents();
-  } else {
-    toast('❌ ' + (res.detail || 'Ошибка'), 'error');
-  }
+    toast("Агент создан", "success");
+    document.getElementById("new-name").value = "";
+    await loadAgents();
+    selectAgent(res.id);
+  } else { toast(res.detail || "Ошибка", "error"); }
 }
 
-// ── Goal Modal ──
-let GOAL_AGENT_ID = '';
-function showGoalModal(id) {
-  GOAL_AGENT_ID = id;
-  document.getElementById('goal-modal').classList.add('show');
-  document.getElementById('goal-text').value = '';
-  document.getElementById('goal-context').value = '';
-  const agent = AGENTS.find(a => a.id === id);
-  if (agent && agent.goal) document.getElementById('goal-text').value = agent.goal;
-  setTimeout(() => document.getElementById('goal-text').focus(), 100);
-}
-function hideGoalModal() { document.getElementById('goal-modal').classList.remove('show'); GOAL_AGENT_ID = ''; }
-
+/* ── Goal ─────────────────────────────────────────────────────────── */
+let GOAL_AGENT = null;
+function showGoalModal(agentId) { GOAL_AGENT = agentId; document.getElementById("goal-modal").classList.add("show"); }
+function hideGoalModal() { document.getElementById("goal-modal").classList.remove("show"); }
 async function setGoal() {
-  const goal = document.getElementById('goal-text').value.trim();
-  if (!goal) { toast('Введите цель', 'error'); return; }
-  const context = document.getElementById('goal-context').value.trim();
-  const res = await api('/api/v1/agents/' + GOAL_AGENT_ID + '/goal', {method:'POST', body:{goal, context}});
-  if (res.id) {
-    toast('🎯 Цель поставлена!', 'success');
-    hideGoalModal();
-    loadAgents();
-  } else {
-    toast('❌ ' + (res.detail || 'Ошибка'), 'error');
-  }
+  const goal = document.getElementById("goal-text").value.trim();
+  if (!goal || !GOAL_AGENT) { toast("Введите цель", "error"); return; }
+  const res = await api("/api/v1/agents/" + GOAL_AGENT + "/goal", { method: "POST", body: { goal } });
+  if (res.id) { hideGoalModal(); toast("Цель поставлена", "success"); }
+  else { toast(res.detail || "Ошибка", "error"); }
 }
 
-// ── Transaction Panel ──
-async function showTx(agentId) {
-  TX_AGENT_ID = agentId;
-  document.getElementById('tx-panel').classList.add('show');
-  const list = document.getElementById('tx-list');
-  list.innerHTML = '<div class="tx-empty">⏳ Загрузка транзакций...</div>';
-  const res = await api('/api/v1/agents/' + agentId + '/transactions');
+/* ── Selected agent: status / pending / feed / audit ──────────────── */
+async function selectAgent(agentId) {
+  SELECTED = agentId;
+  renderAgents();
+  renderStatusCard();
+  await Promise.all([refreshFeed(), refreshPending(), refreshAudit()]);
+}
+
+function renderStatusCard() {
+  const card = document.getElementById("status-card");
+  const agent = AGENTS.find((a) => a.id === SELECTED);
+  document.getElementById("status-agent-name").textContent = agent ? agent.name : "—";
+  if (!agent) { card.replaceChildren(el("div", "empty", "Выберите агента")); return; }
+  card.replaceChildren();
+  const line1 = el("div", "status-line");
+  line1.appendChild(el("span", "muted", "Статус"));
+  line1.appendChild(statusBadge(agent.status));
+  card.appendChild(line1);
+
+  const line2 = el("div", "status-line");
+  line2.appendChild(el("span", "muted", "Сеть"));
+  line2.appendChild(el("span", "mono", "chain_id " + agent.chain_id));
+  card.appendChild(line2);
+
+  const line3 = el("div", "status-line");
+  line3.appendChild(el("span", "muted", "Кошелёк"));
+  line3.appendChild(el("span", "mono", agent.wallet_address || "не настроен"));
+  card.appendChild(line3);
+
+  const hb = el("button", "btn small ghost", "♥ Heartbeat");
+  hb.onclick = async () => {
+    const res = await api("/api/v1/agents/" + SELECTED + "/heartbeat", { method: "POST" });
+    toast(res.status === "ok" ? "Heartbeat отправлен" : (res.detail || "Агент не запущен"),
+          res.status === "ok" ? "success" : "error");
+  };
+  card.appendChild(hb);
+}
+
+async function refreshFeed() {
+  const feed = document.getElementById("decisions-feed");
+  if (!SELECTED) { feed.replaceChildren(el("div", "empty", "Выберите агента")); return; }
+  const res = await api("/api/v1/agents/" + SELECTED + "/decisions?limit=30");
+  const decisions = res.decisions || [];
+  feed.replaceChildren();
+  if (!decisions.length) { feed.appendChild(el("div", "empty", "Решений пока нет")); return; }
+  decisions.forEach((d) => feed.appendChild(decisionCard(d)));
+}
+
+function decisionCard(d) {
+  const card = el("div", "decision-card");
+  const head = el("div", "head");
+  head.appendChild(el("span", "action", d.action));
+  head.appendChild(riskBadge(d.risk_level));
+  head.appendChild(confBar(d.confidence));
+  head.appendChild(el("span", "time", fmtTime(d.created_at)));
+  card.appendChild(head);
+
+  card.appendChild(el("div", "reasoning", (d.reasoning || "—")));
+
+  const why = el("button", "why-btn", "Почему?");
+  const details = el("div", "why-details");
+  details.style.display = "none";
+  const lines = [];
+  lines.push("confidence: " + (d.confidence !== null && d.confidence !== undefined ? d.confidence : "—"));
+  lines.push("status: " + (d.status || "—"));
+  if (d.requires_approval) lines.push("requires_approval: true");
+  if (d.policy_verdict) lines.push("policy_verdict: " + JSON.stringify(d.policy_verdict, null, 2));
+  details.textContent = lines.join("\n");
+  why.onclick = () => { details.style.display = details.style.display === "none" ? "block" : "none"; };
+  card.append(why, details);
+  return card;
+}
+
+async function refreshPending() {
+  const list = document.getElementById("pending-list");
+  const count = document.getElementById("pending-count");
+  if (!SELECTED) { list.replaceChildren(el("div", "empty", "—")); count.textContent = "0"; return; }
+  const res = await api("/api/v1/agents/" + SELECTED + "/pending");
+  if (res.detail) { list.replaceChildren(el("div", "empty", res.detail)); count.textContent = "0"; return; }
+  const items = res.pending || [];
+  count.textContent = String(res.total || 0);
+  list.replaceChildren();
+  if (!items.length) { list.appendChild(el("div", "empty", "Нет отложенных действий")); return; }
+  items.forEach((item) => {
+    const row = el("div", "pending-item");
+    const info = el("div");
+    info.appendChild(el("div", null, item.action + " · до " + fmtTime(item.execute_after)));
+    info.appendChild(el("div", "muted mono", "id " + item.id));
+    row.appendChild(info);
+    const cancel = el("button", "btn small danger", "Отменить");
+    cancel.onclick = async () => {
+      const res2 = await api("/api/v1/agents/" + SELECTED + "/pending/" + item.id + "/cancel", { method: "POST" });
+      if (res2.status === "ok") { toast("Отменено", "success"); refreshPending(); }
+      else { toast(res2.detail || "Ошибка", "error"); }
+    };
+    row.appendChild(cancel);
+    list.appendChild(row);
+  });
+}
+
+async function refreshAudit() {
+  const list = document.getElementById("audit-list");
+  const count = document.getElementById("audit-count");
+  if (!SELECTED) { list.replaceChildren(el("div", "empty", "—")); count.textContent = "0"; return; }
+  const res = await api("/api/v1/agents/" + SELECTED + "/audit?limit=100");
+  if (res.detail) { list.replaceChildren(el("div", "empty", res.detail)); count.textContent = "0"; return; }
+  const events = res.events || [];
+  count.textContent = String(res.total || 0);
+  list.replaceChildren();
+  if (!events.length) { list.appendChild(el("div", "empty", "Событий пока нет")); return; }
+  events.slice().reverse().forEach((e) => {
+    const row = el("div", "audit-row");
+    row.appendChild(el("span", "etype", e.event_type));
+    row.appendChild(el("span", "hash", (e.hash || "").slice(0, 10) + "…"));
+    const details = el("div", "audit-details");
+    details.style.display = "none";
+    details.textContent = JSON.stringify({ actor: e.actor, payload: e.payload, prev_hash: e.prev_hash, hash: e.hash, created_at: e.created_at }, null, 2);
+    row.onclick = () => { details.style.display = details.style.display === "none" ? "block" : "none"; };
+    list.append(row, details);
+  });
+}
+
+/* ── Transactions drawer ──────────────────────────────────────────── */
+async function showTxPanel(agentId) {
+  document.getElementById("tx-panel").classList.add("show");
+  const list = document.getElementById("tx-list");
+  list.replaceChildren(el("div", "empty", "Загрузка…"));
+  const res = await api("/api/v1/agents/" + agentId + "/transactions");
   const txs = res.transactions || [];
-  const agent = AGENTS.find(a => a.id === agentId);
-  if (!txs.length) {
-    list.innerHTML = '<div class="tx-empty">📭 Нет транзакций для ' + (agent ? agent.name : 'агента') + '</div>';
-    return;
-  }
-  list.innerHTML = txs.map(tx => `
-    <div class="tx-item">
-      <div class="tx-type">${tx.type || 'unknown'}</div>
-      <div class="tx-hash">${tx.hash || tx.tx_hash || '-'}</div>
-      <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
-        <span class="tx-status ${(tx.status||'pending')}">${tx.status || 'pending'}</span>
-        <span class="tx-time">${tx.timestamp ? new Date(tx.timestamp).toLocaleString() : ''}</span>
-      </div>
-    </div>
-  `).join('');
+  list.replaceChildren();
+  if (!txs.length) { list.appendChild(el("div", "empty", "Транзакций пока нет (исполнение — Phase 5)")); return; }
+  txs.forEach((tx) => {
+    const item = el("div", "audit-row");
+    item.appendChild(el("span", "etype", tx.status + " · " + (tx.tx_hash || "—").slice(0, 14)));
+    item.appendChild(el("span", "hash", tx.timestamp ? String(tx.timestamp).slice(0, 19) : ""));
+    list.appendChild(item);
+  });
 }
-
-function hideTxPanel() { document.getElementById('tx-panel').classList.remove('show'); TX_AGENT_ID = ''; }
-
-// ── Keyboard shortcuts ──
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') {
-    hideCreateModal(); hideGoalModal(); hideTxPanel();
-  }
-});
+function hideTxPanel() { document.getElementById("tx-panel").classList.remove("show"); }

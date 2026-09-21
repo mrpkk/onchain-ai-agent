@@ -6,127 +6,138 @@
 <meta name="theme-color" content="#0A0E17">
 <title>KARTA — Cockpit</title>
 <link rel="manifest" href="/static/manifest.webmanifest">
-<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="/static/tokens.css">
 <link rel="stylesheet" href="/static/dashboard.css">
 </head>
 <body>
 
-
-<!-- ═══ Auth Screen ═══ -->
+<!-- ═══ Auth ═══ -->
 <div id="auth-screen">
   <div class="auth-box">
     <h1>KARTA</h1>
-    <p class="sub">Платформа для управления AI-агентами</p>
+    <p class="sub">Trust layer: агент предлагает — политика разрешает</p>
     <div class="auth-tabs">
       <div class="auth-tab active" onclick="switchAuth('login')">Вход</div>
       <div class="auth-tab" onclick="switchAuth('register')">Регистрация</div>
     </div>
-
     <div id="login-form" class="auth-form active">
       <input id="login-username" placeholder="Имя пользователя" autocomplete="username">
       <input id="login-password" type="password" placeholder="Пароль" autocomplete="current-password">
       <div class="auth-error" id="login-error"></div>
-      <button class="btn-primary" onclick="doLogin()">🔐 Войти</button>
+      <button class="btn primary wide" onclick="doLogin()">Войти</button>
     </div>
-
     <div id="register-form" class="auth-form">
       <input id="reg-username" placeholder="Имя пользователя" autocomplete="username">
       <input id="reg-password" type="password" placeholder="Пароль (мин. 8 символов)" autocomplete="new-password">
       <div class="auth-error" id="reg-error"></div>
-      <button class="btn-primary" onclick="doRegister()">📝 Создать аккаунт</button>
+      <button class="btn primary wide" onclick="doRegister()">Создать аккаунт</button>
     </div>
   </div>
 </div>
 
-<!-- ═══ Dashboard ═══ -->
+<!-- ═══ Cockpit ═══ -->
 <div id="dash-screen">
-  <div class="dash-header">
-    <h2>KARTA</h2>
-    <div class="user-info">
-      <span id="dash-username" style="color:#8b949e;font-size:0.85rem;"></span>
-      <a href="/docs" style="color:#58a6ff;font-size:0.8rem;text-decoration:none;">📖 API</a>
-      <button class="btn-logout" onclick="doLogout()">🚪 Выйти</button>
+  <header class="topbar">
+    <div class="brand"><span class="brand-dot"></span><span>KARTA</span></div>
+    <div class="topbar-right">
+      <span class="badge" id="ws-status" data-state="offline">WS OFFLINE</span>
+      <span class="muted" id="dash-username"></span>
+      <a class="link" href="/docs" target="_blank" rel="noopener">API</a>
+      <button class="btn ghost" onclick="doLogout()">Выйти</button>
     </div>
-  </div>
+  </header>
 
-  <div class="stats" id="stats-bar">
-    <div class="stat-card blue"><div class="num" id="stat-total">0</div><div class="label">🤖 Всего агентов</div></div>
-    <div class="stat-card green"><div class="num" id="stat-running">0</div><div class="label">✅ Активные</div></div>
-    <div class="stat-card"><div class="num" id="stat-created">0</div><div class="label">⏳ Создано</div></div>
-    <div class="stat-card"><div class="num" id="stat-stopped">0</div><div class="label">⏸️ Остановлено</div></div>
-    <div class="stat-card red"><div class="num" id="stat-killed">0</div><div class="label">☠️ Убито</div></div>
-  </div>
+  <main class="cockpit">
+    <section class="panel">
+      <div class="panel-head">
+        <h3>Мои агенты</h3>
+        <button class="btn primary small" onclick="showCreateModal()">+ Агент</button>
+      </div>
+      <div id="agent-list" class="agent-list">
+        <div class="empty">Загрузка…</div>
+      </div>
+    </section>
 
-  <div class="controls">
-    <h3>🤖 Мои агенты</h3>
-    <button class="btn-create" onclick="showCreateModal()">➕ Создать агента</button>
-  </div>
+    <section class="panel">
+      <div class="panel-head"><h3>Статус</h3><span class="muted" id="status-agent-name">—</span></div>
+      <div id="status-card" class="status-card">
+        <div class="empty">Выберите агента</div>
+      </div>
+      <div class="panel-head"><h3>Очередь undo</h3><span class="muted" id="pending-count">0</span></div>
+      <div id="pending-list" class="pending-list">
+        <div class="empty">Нет отложенных действий</div>
+      </div>
+    </section>
 
-  <div class="agent-list" id="agent-list">
-    <div class="agent-empty">Загрузка агентов...</div>
+    <section class="panel wide">
+      <div class="panel-head">
+        <h3>Лента решений</h3>
+        <button class="btn ghost small" onclick="refreshFeed()">Обновить</button>
+      </div>
+      <div id="decisions-feed" class="feed">
+        <div class="empty">Выберите агента</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h3>Sakshi Log</h3><span class="muted" id="audit-count">0</span></div>
+      <div id="audit-list" class="audit">
+        <div class="empty">—</div>
+      </div>
+    </section>
+  </main>
+
+  <div class="tx-panel" id="tx-panel">
+    <div class="tx-header">
+      <h3>Транзакции</h3>
+      <button class="icon-btn" onclick="hideTxPanel()">✕</button>
+    </div>
+    <div class="tx-list" id="tx-list"><div class="empty">—</div></div>
   </div>
 </div>
 
-<!-- ═══ Create Modal ═══ -->
+<!-- ═══ Modals ═══ -->
 <div class="modal-overlay" id="create-modal">
   <div class="modal">
-    <h3>🤖 Создать AI-агента</h3>
-    <label>Имя агента</label>
+    <h3>Новый агент</h3>
+    <label>Имя</label>
     <input id="new-name" placeholder="MarketWatcher">
     <label>Описание</label>
-    <textarea id="new-desc" placeholder="Мониторинг цен BTC и алерты..."></textarea>
+    <textarea id="new-desc" placeholder="Мониторинг и алерты…"></textarea>
     <label>Стратегия</label>
     <select id="new-strategy">
       <option value="default">Default</option>
-      <option value="arbitrage">Arbitrage</option>
-      <option value="yield-farming">Yield Farming</option>
       <option value="monitoring">Monitoring</option>
+      <option value="yield-farming">Yield Farming</option>
+      <option value="arbitrage">Arbitrage</option>
     </select>
-    <label>Chain ID</label>
+    <label>Сеть</label>
     <select id="new-chain">
-      <option value="1">Ethereum (1)</option>
-      <option value="56">BNB Chain (56)</option>
-      <option value="137">Polygon (137)</option>
-      <option value="10">Optimism (10)</option>
-      <option value="42161">Arbitrum (42161)</option>
+      <option value="11155111">Sepolia (тест)</option>
+      <option value="1">Ethereum</option>
+      <option value="137">Polygon</option>
+      <option value="56">BSC</option>
     </select>
     <div class="modal-btns">
-      <button class="btn-cancel" onclick="hideCreateModal()">Отмена</button>
-      <button class="btn-submit" onclick="createAgent()">🚀 Создать</button>
+      <button class="btn ghost" onclick="hideCreateModal()">Отмена</button>
+      <button class="btn primary" onclick="createAgent()">Создать</button>
     </div>
   </div>
 </div>
 
-<!-- ═══ Goal Modal ═══ -->
 <div class="modal-overlay" id="goal-modal">
   <div class="modal">
-    <h3>🎯 Поставить цель</h3>
+    <h3>Цель агента</h3>
     <label>Цель</label>
-    <textarea id="goal-text" placeholder="Monitor BTC price and alert when >5% drop in 1h" style="min-height:80px;"></textarea>
-    <label>Контекст (опционально)</label>
-    <textarea id="goal-context" placeholder="BTC has strong support at $60k..." style="min-height:60px;"></textarea>
+    <textarea id="goal-text" placeholder="Следи за газом и сообщай, когда < 20 gwei"></textarea>
     <div class="modal-btns">
-      <button class="btn-cancel" onclick="hideGoalModal()">Отмена</button>
-      <button class="btn-submit" onclick="setGoal()">🎯 Поставить</button>
+      <button class="btn ghost" onclick="hideGoalModal()">Отмена</button>
+      <button class="btn primary" onclick="setGoal()">Поставить</button>
     </div>
   </div>
 </div>
 
-<!-- ═══ TX Panel ═══ -->
-<div class="tx-panel" id="tx-panel">
-  <div class="tx-header">
-    <h3>📋 Транзакции</h3>
-    <button class="close-btn" onclick="hideTxPanel()">✕</button>
-  </div>
-  <div class="tx-list" id="tx-list">
-    <div class="tx-empty">Выберите агента для просмотра транзакций</div>
-  </div>
-</div>
-
-<!-- ═══ Toast ═══ -->
 <div class="toast" id="toast"></div>
-
-</body>
 <script src="/static/dashboard.js"></script>
+</body>
 </html>
