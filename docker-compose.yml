@@ -37,6 +37,9 @@ services:
     restart: unless-stopped
 
   redis:
+    # Опционально: для single-process MVP не требуется (WS/ratelimit/кэш — in-process).
+    # Multi-worker режим: docker compose --profile optional up
+    profiles: ["optional"]
     image: redis:7-alpine
     container_name: onchain-agent-redis
     ports:
