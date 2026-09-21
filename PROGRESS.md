@@ -94,6 +94,8 @@
 - [x] S3-04 Dead-man switch: `AgentConfig.deadman_timeout_seconds` (0=выкл), `heartbeat()` продлевает, `_check_deadman()` в начале тика: просрочка → **hard kill** без auto-resume (audit `deadman_triggered`). 4 теста. Коммит `aabaa4e`. Долг: внешний watchdog для случая смерти процесса (in-process не видит мёртвый процесс) — в слайсе эксплуатации/интеграции.
 - [x] S3-05 Approval Guardian: `agent/guardian.py` — `AllowanceReport`, классификация (блок-лист spender → HIGH_RISK; 2^256-1 → HIGH_RISK; ≥ review_threshold → REVIEW; 0 → SAFE; ошибка чтения → REVIEW честно), `scan(w3, owner, pairs)`, `build_revoke_plan()` (только REVIEW/HIGH_RISK). 5 тестов. Честное ограничение: полное перечисление approvals невозможно без индексатора — сканируются известные пары. UI-рекомендации — в P4. Коммит `8bdb88f`.
 
+- [x] S3-06 (интеграция, долги): **API⟷Runtime** — `runtime/factory.py` (сборка OnChainAgent из БД: активная политика DSL→CompiledPolicy, KeyVault, Sakshi, WS-sink, db_agent_id; нет политики→дефолт; нет vault/audit-ключа→честный режим без исполнения), `runtime/manager.py` (реестр running-агентов + asyncio-задачи). API: start→сборка+запуск, stop→остановка, kill-switch→hard kill runtime; новые эндпоинты **POST /heartbeat**, **GET /pending**, **POST /pending/{id}/cancel**, **GET /decisions** (Decision Diary из БД), **GET /audit** (Sakshi с hash-цепочкой). 9 тестов (fake-runtime + реальная фабрика с policy/дефолтом). Коммит `6fb6bd6`. Закрыты долги: heartbeat-API, cancel-API, decisions-API, audit-API, сборка из БД.
+
 ### P4 — Friendly-ядро + бренд (2–3 нед)
 - [ ] S4-01 Дизайн-система (токены SPEC §11, все состояния компонентов)
 - [ ] S4-02 Кокпит (статус-бар/план-таймлайн/лента решений/спарклайны)
