@@ -24,6 +24,7 @@ from .execution import (
 from ..db import DecisionRepository, session_scope
 from ..security.keyvault import KeyVault
 from ..security.sakshi import SakshiLog
+from .simulation import SimulationReceipt, SimulationService
 from ..security.dharma import (
     CompiledPolicy, TxContext, Verdict, VerdictDecision,
     build_default_policy, evaluate as dharma_evaluate,
@@ -62,6 +63,7 @@ class AgentState:
     failed_transactions: int = 0
     last_action: Optional[str] = None
     last_action_time: Optional[datetime] = None
+    last_simulation: Optional[dict] = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def to_dict(self) -> dict:
@@ -78,6 +80,7 @@ class AgentState:
             "failed_transactions": self.failed_transactions,
             "last_action": self.last_action,
             "last_action_time": self.last_action_time.isoformat() if self.last_action_time else None,
+            "last_simulation": self.last_simulation,
             "kill_switch": self.config.kill_switch,
             "simulation_mode": self.config.simulation_mode,
             "plan_progress": self.current_plan.progress if self.current_plan else 0,
@@ -93,7 +96,8 @@ class OnChainAgent:
                  policy: Optional[CompiledPolicy] = None,
                  db_agent_id: Optional[uuid.UUID] = None,
                  sakshi: Optional[SakshiLog] = None,
-                 event_sink: Optional[Callable[[dict], Awaitable[None]]] = None):
+                 event_sink: Optional[Callable[[dict], Awaitable[None]]] = None,
+                 simulator: Optional[SimulationService] = None):
         self.config = config
         self.agent_id = f"agent_{config.name.lower().replace(' ', '_')}"
 
@@ -123,6 +127,7 @@ class OnChainAgent:
         self._db_agent_id = db_agent_id
         self._sakshi = sakshi
         self._event_sink = event_sink
+        self.simulator = simulator or SimulationService()
 
         self.state = AgentState(
             agent_id=self.agent_id,
@@ -201,6 +206,77 @@ class OnChainAgent:
             "rule_ids": verdict.rule_ids,
         })
         return verdict
+
+    def _build_sim_tx(self, action: str, params: dict) -> Optional[dict]:
+        """tx-параметры для eth_call (transfer/approve/contract_call)."""
+        if self.wallet is None:
+            return None
+        try:
+            sender = self.wallet.address
+        except Exception:
+            return None
+        tx: dict = {"from": sender}
+        if action == "transfer":
+            to = params.get("to")
+            if not to:
+                return None
+            try:
+                tx["to"] = Web3.to_checksum_address(str(to))
+            except Exception:
+                return None
+            amount = float(params.get("amount") or 0)
+            tx.update({"value": int(amount * 10**18), "data": "0x"})
+        elif action in ("approve", "contract_call"):
+            target = params.get("token") or params.get("address")
+            if not target:
+                return None
+            try:
+                tx["to"] = Web3.to_checksum_address(str(target))
+            except Exception:
+                return None
+            tx.update({"value": 0, "data": "0x"})
+        else:
+            return None
+        return tx
+
+    def _simulate(self, action: str, params: dict) -> Optional[SimulationReceipt]:
+        """Receipt или None, если симуляция невозможна (нет RPC/кошелька/tx-параметров)."""
+        w3 = self.perception.get_web3(self.config.chain)
+        if w3 is None or self.wallet is None:
+            return None
+        tx = self._build_sim_tx(action, params)
+        if tx is None:
+            return None
+        return self.simulator.simulate_tx(w3, tx)
+
+    async def _simulation_gate(self, action: str, params: dict) -> Optional[TransactionResult]:
+        """None — исполнение разрешено; FAILED-результат — блок (SIMULATION FIRST)."""
+        receipt = self._simulate(action, params)
+        if receipt is None:
+            self._log_audit("simulation_unavailable", {"action": action})
+            await self._sakshi_append("simulation_unavailable", {"action": action})
+            return TransactionResult(
+                tx_hash="", status=TxStatus.FAILED, chain=self.config.chain,
+                from_address="", to_address="", value=0, gas_used=0, gas_price_gwei=0,
+                error="Simulation unavailable: execution blocked (SIMULATION FIRST)",
+            )
+        self.state.last_simulation = receipt.to_dict()
+        if not receipt.ok or not receipt.is_fresh():
+            reason = receipt.revert_reason or "stale simulation receipt"
+            self._log_audit("simulation_failed", {"action": action, "reason": reason})
+            await self._sakshi_append("simulation_failed", {"action": action, "reason": reason})
+            return TransactionResult(
+                tx_hash="", status=TxStatus.FAILED, chain=self.config.chain,
+                from_address="", to_address="", value=0, gas_used=0, gas_price_gwei=0,
+                error=f"Simulation failed: {reason}",
+            )
+        self._log_audit("simulation_passed", {"action": action,
+                                              "gas_estimate": receipt.gas_estimate})
+        await self._sakshi_append("simulation_passed", {
+            "action": action, "gas_estimate": receipt.gas_estimate,
+            "engine": receipt.engine,
+        })
+        return None
 
     async def _emit(self, event: dict) -> None:
         """Публикация live-события (WS). Ошибки sink не ломают агента."""
@@ -392,6 +468,11 @@ class OnChainAgent:
                 self._ensure_wallet()
                 if self.executor is None:
                     raise RuntimeError("Кошелёк не настроен (KeyVault): шаг требует исполнения")
+                blocked = await self._simulation_gate(step.step_type.value, step.params)
+                if blocked is not None:
+                    step.status = PlanStatus.FAILED
+                    step.error = blocked.error
+                    return
 
             if step.step_type == StepType.READ_STATE:
                 state = await self._gather_state()
@@ -499,6 +580,10 @@ class OnChainAgent:
                 from_address="", to_address="", value=0, gas_used=0, gas_price_gwei=0,
                 error="Wallet not configured (KeyVault): execution unavailable",
             )
+        if decision.action in ("transfer", "contract_call", "approve"):
+            blocked = await self._simulation_gate(decision.action, decision.params)
+            if blocked is not None:
+                return blocked
         if decision.action == "transfer":
             return self.executor.send_eth(
                 to_address=decision.params.get("to", ""),
