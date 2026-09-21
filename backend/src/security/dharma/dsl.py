@@ -63,6 +63,17 @@ class CircuitBreakers(BaseModel):
     revert_streak_gte: int = Field(default=3, ge=1)
 
 
+class UndoRules(BaseModel):
+    """Окно отмены для необратимых действий (SPEC S3-03).
+
+    window_seconds=0 → выключено (действие исполняется сразу).
+    """
+
+    model_config = _FORBID_EXTRA
+    window_seconds: int = Field(default=0, ge=0, le=86400)
+    threshold_eth: float = Field(default=0.25, ge=0)
+
+
 class PolicyModel(BaseModel):
     model_config = _FORBID_EXTRA
     version: int = Field(default=1, ge=1)
@@ -72,6 +83,7 @@ class PolicyModel(BaseModel):
     approvals: ApprovalRules = Field(default_factory=ApprovalRules)
     active_utc: str | None = None  # "HH:MM-HH:MM"
     circuit_breakers: CircuitBreakers = Field(default_factory=CircuitBreakers)
+    undo: UndoRules = Field(default_factory=UndoRules)
 
 
 @dataclass(frozen=True)

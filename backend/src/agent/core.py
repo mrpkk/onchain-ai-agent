@@ -25,6 +25,7 @@ from ..db import DecisionRepository, session_scope
 from ..security.keyvault import KeyVault
 from ..security.sakshi import SakshiLog
 from .simulation import SimulationReceipt, SimulationService
+from .timelock import PendingAction, TimelockQueue
 from ..security.dharma import (
     CompiledPolicy, TxContext, Verdict, VerdictDecision,
     build_default_policy, evaluate as dharma_evaluate,
@@ -128,6 +129,7 @@ class OnChainAgent:
         self._sakshi = sakshi
         self._event_sink = event_sink
         self.simulator = simulator or SimulationService()
+        self.timelock = TimelockQueue()
 
         self.state = AgentState(
             agent_id=self.agent_id,
@@ -278,6 +280,62 @@ class OnChainAgent:
         })
         return None
 
+    def _undo_delay(self, action: str, params: dict) -> int:
+        """Окно отмены (сек) для действия; 0 — исполнять сразу."""
+        if action not in ("transfer", "contract_call", "approve"):
+            return 0
+        undo = getattr(self.policy.model, "undo", None)
+        if undo is None or undo.window_seconds <= 0:
+            return 0
+        value = float(params.get("amount") or params.get("value") or 0)
+        if value < undo.threshold_eth:
+            return 0
+        return int(undo.window_seconds)
+
+    async def _schedule_with_undo(self, action: str, params: dict,
+                                  delay: int) -> TransactionResult:
+        pending = self.timelock.schedule(action, params, delay)
+        self.state.status = "awaiting_undo"
+        self._log_audit("action_scheduled", {"id": pending.id, "action": action,
+                                             "execute_after": pending.execute_after.isoformat()})
+        await self._sakshi_append("action_scheduled", {
+            "id": pending.id, "action": action, "params": params,
+            "execute_after": pending.execute_after.isoformat(),
+        })
+        await self._emit({"type": "action.scheduled",
+                          "agent_id": str(self._db_agent_id) if self._db_agent_id else self.agent_id,
+                          "id": pending.id, "action": action, "delay_seconds": delay})
+        return TransactionResult(
+            tx_hash="", status=TxStatus.PENDING, chain=self.config.chain,
+            from_address="", to_address="", value=0, gas_used=0, gas_price_gwei=0,
+            error=None,
+        )
+
+    def cancel_pending(self, item_id: str) -> bool:
+        """Отмена отложенного действия (окно undo)."""
+        cancelled = self.timelock.cancel(item_id)
+        self._log_audit("action_cancelled", {"id": item_id, "ok": cancelled})
+        return cancelled
+
+    async def _process_due_actions(self) -> None:
+        """Исполнение действий, у которых истекло окно отмены (полный контур заново)."""
+        for item in self.timelock.due():
+            if self._kill_switch_active():
+                return
+            decision = AgentDecision(
+                action=item.action, params=item.params,
+                reasoning=f"timelock execution (scheduled {item.created_at.isoformat()})",
+                confidence=1.0, risk_level="medium",
+            )
+            result = await self._execute_decision(decision, skip_timelock=True)
+            self.timelock.mark(item.id, "executed" if result.status == TxStatus.CONFIRMED else "failed")
+            self._log_audit("timelock_executed" if result.status == TxStatus.CONFIRMED
+                            else "timelock_failed",
+                            {"id": item.id, "status": result.status.value, "error": result.error})
+            await self._sakshi_append("timelock_result", {
+                "id": item.id, "status": result.status.value, "error": result.error,
+            })
+
     async def _emit(self, event: dict) -> None:
         """Публикация live-события (WS). Ошибки sink не ломают агента."""
         if self._event_sink is None:
@@ -360,6 +418,8 @@ class OnChainAgent:
 
     async def _tick(self):
         self.state.status = "thinking"
+
+        await self._process_due_actions()
 
         if self.current_plan and not self.current_plan.is_done:
             await self._execute_plan_step()
@@ -547,7 +607,8 @@ class OnChainAgent:
     def _kill_switch_active(self) -> bool:
         return self.config.kill_switch or self.state.status in ("killed", "paused")
 
-    async def _execute_decision(self, decision: AgentDecision) -> TransactionResult:
+    async def _execute_decision(self, decision: AgentDecision, *,
+                                skip_timelock: bool = False) -> TransactionResult:
         if self._kill_switch_active():
             self._log_audit("kill_switch_block", {"action": decision.action})
             return TransactionResult(
@@ -584,6 +645,11 @@ class OnChainAgent:
             blocked = await self._simulation_gate(decision.action, decision.params)
             if blocked is not None:
                 return blocked
+            if not skip_timelock:
+                delay = self._undo_delay(decision.action, decision.params)
+                if delay > 0:
+                    return await self._schedule_with_undo(decision.action,
+                                                          decision.params, delay)
         if decision.action == "transfer":
             return self.executor.send_eth(
                 to_address=decision.params.get("to", ""),
@@ -646,6 +712,10 @@ class OnChainAgent:
         return state
 
     def _update_state_from_result(self, result: TransactionResult):
+        if result.status == TxStatus.PENDING:
+            self.state.last_action = "scheduled"
+            self.state.last_action_time = datetime.now(timezone.utc)
+            return
         self.state.total_transactions += 1
         if result.status == TxStatus.CONFIRMED:
             self.state.successful_transactions += 1
