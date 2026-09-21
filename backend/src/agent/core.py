@@ -357,6 +357,20 @@ class OnChainAgent:
                 "id": item.id, "status": result.status.value, "error": result.error,
             })
 
+    async def execute_intent(self, action: str, params: dict) -> dict:
+        """Исполнение подтверждённого намерения из чата (S4-03).
+
+        Проходит весь контур: policy → simulation → timelock → dispatch.
+        """
+        decision = AgentDecision(
+            action=action, params=params or {},
+            reasoning="user-confirmed intent via chat (S4-03)",
+            confidence=1.0, risk_level="medium",
+        )
+        result = await self._execute_decision(decision)
+        self._update_state_from_result(result)
+        return result.to_dict()
+
     async def _emit(self, event: dict) -> None:
         """Публикация live-события (WS). Ошибки sink не ломают агента."""
         if self._event_sink is None:

@@ -23,6 +23,10 @@ from .models import (
     AgentUpdate,
     GoalRequest,
     HealthResponse,
+    IntentConfirmRequest,
+    IntentConfirmResponse,
+    IntentPreviewResponse,
+    IntentRequest,
     AuditEventResponse,
     AuditListResponse,
     DecisionListResponse,
@@ -47,7 +51,9 @@ from ..db import (AgentRepository, DecisionRepository, PolicyRepository,
                   TransactionRepository, UserRepository, create_all, session_scope)
 from ..runtime import build_agent
 from ..runtime import manager as runtime_manager
-from ..security.dharma import PolicyError, compile_yaml
+from ..security.dharma import PolicyError, TxContext, build_default_policy, compile_yaml, evaluate
+from ..agent.intent import parse_intent
+from ..providers.llm import AllProvidersFailed
 from ..security.passwords import hash_password, verify_and_upgrade
 from ..security.tokens import (
     ACCESS,
@@ -426,6 +432,58 @@ async def list_transactions(
         total = await repo.count_for_agent(agent.id)
         items = [_tx_to_response(tx) for tx in txs]
     return TransactionListResponse(transactions=items, total=total)
+
+
+# ── Chat-first intent (S4-03) ──────────────────────────────────────────
+
+@app.post("/api/v1/agents/{agent_id}/intent", response_model=IntentPreviewResponse)
+async def parse_agent_intent(
+    agent_id: str,
+    body: IntentRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+        policy_row = await PolicyRepository(session).get_active(agent.id)
+
+    policy = compile_yaml(policy_row.dsl_yaml) if policy_row else build_default_policy()
+    try:
+        intent, _result = await parse_intent(body.text)
+    except AllProvidersFailed as e:
+        raise HTTPException(status_code=503, detail=f"LLM unavailable: {e}")
+
+    verdict = evaluate(policy, TxContext(
+        action=intent.action, params=intent.params, chain_id=agent.chain_id,
+        gas_price_gwei=0.0, risk_score=0.5, new_spender=False,
+    ))
+    warnings = [
+        "Предварительная оценка: газ и история транзакций не учтены",
+        "Симуляция выполняется при подтверждении (зависит от кошелька)",
+    ]
+    if intent.needs_clarification:
+        warnings.append("Нужны уточнения — подтверждение недоступно до ответов")
+    return IntentPreviewResponse(ok=True, intent=intent.model_dump(),
+                                 policy_verdict=verdict.to_dict(), warnings=warnings)
+
+
+@app.post("/api/v1/agents/{agent_id}/intent/confirm", response_model=IntentConfirmResponse)
+async def confirm_agent_intent(
+    agent_id: str,
+    body: IntentConfirmRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+    runtime = runtime_manager.get(str(agent.id))
+    if runtime is None:
+        raise HTTPException(status_code=409, detail="Agent is not running")
+    result = await runtime.execute_intent(body.action, body.params)
+    return IntentConfirmResponse(
+        status=result.get("status", "unknown"),
+        tx_hash=result.get("tx_hash") or None,
+        error=result.get("error"),
+        detail=result,
+    )
 
 
 # ── Runtime ops: heartbeat / pending / decisions / audit (S3-06) ───────

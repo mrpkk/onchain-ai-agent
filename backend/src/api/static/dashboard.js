@@ -263,9 +263,102 @@ async function setGoal() {
 /* ── Selected agent: status / pending / feed / audit ──────────────── */
 async function selectAgent(agentId) {
   SELECTED = agentId;
+  document.getElementById("chat-preview").replaceChildren();
+  document.getElementById("chat-result").replaceChildren();
   renderAgents();
   renderStatusCard();
   await Promise.all([refreshFeed(), refreshPending(), refreshAudit()]);
+}
+
+/* ── Chat-first intent (S4-03) ────────────────────────────────────── */
+let CHAT_INTENT = null;
+
+async function parseChat() {
+  if (!SELECTED) { toast("Выберите агента", "error"); return; }
+  const text = document.getElementById("chat-input").value.trim();
+  if (!text) { toast("Введите задачу", "error"); return; }
+  const preview = document.getElementById("chat-preview");
+  preview.replaceChildren(el("div", "empty", "Разбираю…"));
+  const res = await api("/api/v1/agents/" + SELECTED + "/intent", { method: "POST", body: { text } });
+  if (!res.ok) {
+    preview.replaceChildren(el("div", "empty", res.detail || res.error || "Ошибка разбора"));
+    return;
+  }
+  CHAT_INTENT = res.intent;
+  renderIntentPreview(res);
+}
+
+function renderIntentPreview(res) {
+  const preview = document.getElementById("chat-preview");
+  preview.replaceChildren();
+  const intent = res.intent || {};
+  const card = el("div", "intent-card");
+
+  const head = el("div", "head");
+  head.appendChild(el("span", "action", intent.action || "unknown"));
+  head.appendChild(confBar(intent.confidence));
+  head.appendChild(el("span", "time", intent.needs_clarification ? "нужны уточнения" : "готово к подтверждению"));
+  card.appendChild(head);
+
+  card.appendChild(el("div", "summary", intent.summary || "—"));
+  card.appendChild(el("div", "params", JSON.stringify(intent.params || {}, null, 2)));
+
+  const verdict = res.policy_verdict || {};
+  const vline = el("div", "status-line");
+  vline.appendChild(el("span", "muted", "Dharma (предварительно)"));
+  const decision = verdict.decision || "unknown";
+  const vbadge = el("span", "badge " + (decision === "allow" ? "risk-low" : decision === "deny" ? "risk-high" : "risk-medium"), "policy: " + decision);
+  vline.appendChild(vbadge);
+  card.appendChild(vline);
+  if (verdict.reasons && verdict.reasons.length) {
+    card.appendChild(el("div", "warn-list", "• " + verdict.reasons.join("\n• ")));
+  }
+
+  if ((intent.assumptions || []).length) {
+    card.appendChild(el("div", "muted", "Допущения: " + intent.assumptions.join("; ")));
+  }
+  if ((intent.questions || []).length) {
+    card.appendChild(el("div", "warn-list", "Уточните: " + intent.questions.join("; ")));
+  }
+
+  const actions = el("div", "intent-actions");
+  if (!intent.needs_clarification) {
+    const confirmBtn = el("button", "btn primary small", "Подтвердить");
+    confirmBtn.onclick = () => confirmChat();
+    actions.appendChild(confirmBtn);
+  }
+  const cancelBtn = el("button", "btn ghost small", "Отмена");
+  cancelBtn.onclick = cancelChat;
+  actions.appendChild(cancelBtn);
+  card.appendChild(actions);
+  preview.appendChild(card);
+}
+
+async function confirmChat() {
+  if (!CHAT_INTENT || !SELECTED) return;
+  const result = document.getElementById("chat-result");
+  result.replaceChildren(el("div", "empty", "Исполняю (policy → simulation → …)…"));
+  const res = await api("/api/v1/agents/" + SELECTED + "/intent/confirm",
+                        { method: "POST", body: { action: CHAT_INTENT.action, params: CHAT_INTENT.params } });
+  result.replaceChildren();
+  if (res.detail && res.detail.errors === undefined && typeof res.detail === "string") {
+    result.appendChild(el("div", "warn-list", res.detail));
+    return;
+  }
+  const status = res.status || "unknown";
+  const line = el("div", "status-line");
+  line.appendChild(el("span", "action", "Результат"));
+  line.appendChild(el("span", "badge " + (status === "confirmed" ? "risk-low" : status === "pending" ? "risk-medium" : "risk-high"), status));
+  result.appendChild(line);
+  if (res.tx_hash) result.appendChild(el("div", "params", "tx: " + res.tx_hash));
+  if (res.error) result.appendChild(el("div", "warn-list", res.error));
+  if (status === "pending") { refreshPending(); toast("Отложено в окно undo", "info"); }
+}
+
+function cancelChat() {
+  CHAT_INTENT = null;
+  document.getElementById("chat-preview").replaceChildren();
+  document.getElementById("chat-result").replaceChildren();
 }
 
 function renderStatusCard() {

@@ -44,6 +44,8 @@ def test_static_assets_served(client):
         ("/static/dashboard.js", "new WebSocket"),
         ("/static/dashboard.js", "decision.proposed"),
         ("/static/dashboard.js", "Почему?"),
+        ("/static/dashboard.js", "parseChat"),
+        ("/static/dashboard.js", "intent/confirm"),
         ("/static/manifest.webmanifest", "KARTA"),
     ):
         response = client.get(path)
@@ -61,5 +63,6 @@ def test_dashboard_ids_present(client):
     """Ключевые id разметки на месте (связность HTML↔JS после выноса)."""
     body = client.get("/").text
     for element_id in ("auth-screen", "dash-screen", "agent-list", "create-modal",
-                       "goal-modal", "tx-panel", "toast"):
+                       "goal-modal", "tx-panel", "toast", "chat-input",
+                       "chat-preview", "chat-result"):
         assert f'id="{element_id}"' in body, element_id

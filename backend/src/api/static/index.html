@@ -48,6 +48,16 @@
   </header>
 
   <main class="cockpit">
+    <section class="panel full">
+      <div class="panel-head"><h3>Чат-задача</h3><span class="muted">NL → превью → подтверждение</span></div>
+      <div class="chat-row">
+        <input id="chat-input" placeholder="Переведи 0.01 ETH на 0x…, когда газ < 20 gwei">
+        <button class="btn primary" onclick="parseChat()">Разобрать</button>
+      </div>
+      <div id="chat-preview" class="chat-preview"></div>
+      <div id="chat-result" class="chat-result"></div>
+    </section>
+
     <section class="panel">
       <div class="panel-head">
         <h3>Мои агенты</h3>

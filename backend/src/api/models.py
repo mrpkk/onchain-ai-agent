@@ -191,3 +191,29 @@ class AuditListResponse(BaseModel):
 class PendingListResponse(BaseModel):
     pending: list[dict]
     total: int
+
+
+# ── Chat / Intent (S4-03) ─────────────────────────────────────────────
+
+class IntentRequest(BaseModel):
+    text: str = Field(..., min_length=3, max_length=2000)
+
+
+class IntentPreviewResponse(BaseModel):
+    ok: bool
+    intent: Optional[dict] = None
+    policy_verdict: Optional[dict] = None
+    warnings: list[str] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class IntentConfirmRequest(BaseModel):
+    action: str = Field(..., min_length=1, max_length=32)
+    params: dict = Field(default_factory=dict)
+
+
+class IntentConfirmResponse(BaseModel):
+    status: str
+    tx_hash: Optional[str] = None
+    error: Optional[str] = None
+    detail: dict = Field(default_factory=dict)
