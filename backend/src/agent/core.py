@@ -407,6 +407,9 @@ class OnChainAgent:
         self._running = True
         self.state.status = "running"
         self._log_audit("agent_started", {"config": self.config.name})
+        await self._sakshi_append("agent_started", {
+            "name": self.config.name, "chain": self.config.chain,
+        })
         logger.info(f"Agent '{self.config.name}' started on {self.config.chain}")
 
         if self._ensure_wallet() is not None:
@@ -428,6 +431,7 @@ class OnChainAgent:
                 logger.error(f"Agent tick error: {e}")
                 self.state.status = "error"
                 self._log_audit("tick_error", {"error": str(e)})
+                await self._sakshi_append("tick_error", {"error": str(e)[:300]})
 
             await asyncio.sleep(self.config.polling_interval)
 
@@ -435,6 +439,7 @@ class OnChainAgent:
         self._running = False
         self.state.status = "stopped"
         self._log_audit("agent_stopped", {})
+        await self._sakshi_append("agent_stopped", {"name": self.config.name})
         logger.info(f"Agent '{self.config.name}' stopped")
 
     async def _tick(self):
@@ -445,7 +450,7 @@ class OnChainAgent:
 
         await self._process_due_actions()
 
-        if self.current_plan and not self.current_plan.is_done:
+        if self.state.current_plan and not self.state.current_plan.is_done:
             await self._execute_plan_step()
             return
 
