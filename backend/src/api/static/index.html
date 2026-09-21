@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0A0E17">
+<title>KARTA — Cockpit</title>
+<link rel="manifest" href="/static/manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="/static/tokens.css">
+<link rel="stylesheet" href="/static/dashboard.css">
+</head>
+<body>
+
+
+<!-- ═══ Auth Screen ═══ -->
+<div id="auth-screen">
+  <div class="auth-box">
+    <h1>KARTA</h1>
+    <p class="sub">Платформа для управления AI-агентами</p>
+    <div class="auth-tabs">
+      <div class="auth-tab active" onclick="switchAuth('login')">Вход</div>
+      <div class="auth-tab" onclick="switchAuth('register')">Регистрация</div>
+    </div>
+
+    <div id="login-form" class="auth-form active">
+      <input id="login-username" placeholder="Имя пользователя" autocomplete="username">
+      <input id="login-password" type="password" placeholder="Пароль" autocomplete="current-password">
+      <div class="auth-error" id="login-error"></div>
+      <button class="btn-primary" onclick="doLogin()">🔐 Войти</button>
+    </div>
+
+    <div id="register-form" class="auth-form">
+      <input id="reg-username" placeholder="Имя пользователя" autocomplete="username">
+      <input id="reg-password" type="password" placeholder="Пароль (мин. 8 символов)" autocomplete="new-password">
+      <div class="auth-error" id="reg-error"></div>
+      <button class="btn-primary" onclick="doRegister()">📝 Создать аккаунт</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Dashboard ═══ -->
+<div id="dash-screen">
+  <div class="dash-header">
+    <h2>KARTA</h2>
+    <div class="user-info">
+      <span id="dash-username" style="color:#8b949e;font-size:0.85rem;"></span>
+      <a href="/docs" style="color:#58a6ff;font-size:0.8rem;text-decoration:none;">📖 API</a>
+      <button class="btn-logout" onclick="doLogout()">🚪 Выйти</button>
+    </div>
+  </div>
+
+  <div class="stats" id="stats-bar">
+    <div class="stat-card blue"><div class="num" id="stat-total">0</div><div class="label">🤖 Всего агентов</div></div>
+    <div class="stat-card green"><div class="num" id="stat-running">0</div><div class="label">✅ Активные</div></div>
+    <div class="stat-card"><div class="num" id="stat-created">0</div><div class="label">⏳ Создано</div></div>
+    <div class="stat-card"><div class="num" id="stat-stopped">0</div><div class="label">⏸️ Остановлено</div></div>
+    <div class="stat-card red"><div class="num" id="stat-killed">0</div><div class="label">☠️ Убито</div></div>
+  </div>
+
+  <div class="controls">
+    <h3>🤖 Мои агенты</h3>
+    <button class="btn-create" onclick="showCreateModal()">➕ Создать агента</button>
+  </div>
+
+  <div class="agent-list" id="agent-list">
+    <div class="agent-empty">Загрузка агентов...</div>
+  </div>
+</div>
+
+<!-- ═══ Create Modal ═══ -->
+<div class="modal-overlay" id="create-modal">
+  <div class="modal">
+    <h3>🤖 Создать AI-агента</h3>
+    <label>Имя агента</label>
+    <input id="new-name" placeholder="MarketWatcher">
+    <label>Описание</label>
+    <textarea id="new-desc" placeholder="Мониторинг цен BTC и алерты..."></textarea>
+    <label>Стратегия</label>
+    <select id="new-strategy">
+      <option value="default">Default</option>
+      <option value="arbitrage">Arbitrage</option>
+      <option value="yield-farming">Yield Farming</option>
+      <option value="monitoring">Monitoring</option>
+    </select>
+    <label>Chain ID</label>
+    <select id="new-chain">
+      <option value="1">Ethereum (1)</option>
+      <option value="56">BNB Chain (56)</option>
+      <option value="137">Polygon (137)</option>
+      <option value="10">Optimism (10)</option>
+      <option value="42161">Arbitrum (42161)</option>
+    </select>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="hideCreateModal()">Отмена</button>
+      <button class="btn-submit" onclick="createAgent()">🚀 Создать</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Goal Modal ═══ -->
+<div class="modal-overlay" id="goal-modal">
+  <div class="modal">
+    <h3>🎯 Поставить цель</h3>
+    <label>Цель</label>
+    <textarea id="goal-text" placeholder="Monitor BTC price and alert when >5% drop in 1h" style="min-height:80px;"></textarea>
+    <label>Контекст (опционально)</label>
+    <textarea id="goal-context" placeholder="BTC has strong support at $60k..." style="min-height:60px;"></textarea>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="hideGoalModal()">Отмена</button>
+      <button class="btn-submit" onclick="setGoal()">🎯 Поставить</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TX Panel ═══ -->
+<div class="tx-panel" id="tx-panel">
+  <div class="tx-header">
+    <h3>📋 Транзакции</h3>
+    <button class="close-btn" onclick="hideTxPanel()">✕</button>
+  </div>
+  <div class="tx-list" id="tx-list">
+    <div class="tx-empty">Выберите агента для просмотра транзакций</div>
+  </div>
+</div>
+
+<!-- ═══ Toast ═══ -->
+<div class="toast" id="toast"></div>
+
+</body>
+<script src="/static/dashboard.js"></script>
+</html>

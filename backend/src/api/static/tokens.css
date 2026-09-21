@@ -1,0 +1,50 @@
+/* KARTA Design Tokens — Quiet Confidence (SPEC §11)
+   Тёмная тема primary; светлая — secondary. WCAG AA: контраст проверять при правках. */
+:root {
+  --bg-primary: #0A0E17;
+  --bg-surface: #12161F;
+  --bg-elevated: #1A1F2E;
+  --bg-deep: #0A0E14;
+  --border: #21262D;
+  --border-strong: #30363D;
+
+  --accent: #5B8DEF;
+  --accent-2: #7C3AED;
+  --accent-gradient: linear-gradient(135deg, #5B8DEF, #7C3AED);
+
+  --success: #34D399;
+  --warning: #FBBF24;
+  --danger: #F87171;
+  --info: #58A6FF;
+
+  --text-primary: #E6EAF2;
+  --text-secondary: #8B93A7;
+  --text-muted: #4A5268;
+
+  --font-ui: 'Inter', 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --space-5: 24px; --space-6: 32px; --space-7: 48px;
+
+  --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px;
+
+  --motion-fast: 150ms ease-out;
+  --motion-normal: 250ms ease-out;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .4);
+  --shadow-2: 0 8px 25px rgba(0, 0, 0, .35);
+  --shadow-accent: 0 8px 25px rgba(91, 141, 239, .25);
+}
+
+[data-theme="light"] {
+  --bg-primary: #F7F8FB;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #F0F2F7;
+  --bg-deep: #EDEFF5;
+  --border: #DCE0E9;
+  --border-strong: #C6CCD8;
+  --text-primary: #1A1F2E;
+  --text-secondary: #5A6376;
+  --text-muted: #8B93A7;
+}
