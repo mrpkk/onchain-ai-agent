@@ -257,3 +257,17 @@ class PolicyFromTextResponse(BaseModel):
     needs_clarification: bool = False
     questions: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+
+# ── Policy simulator (S4-10/P7) ───────────────────────────────────────
+
+class PolicySimulateRequest(BaseModel):
+    dsl_yaml: str = Field(..., min_length=1, max_length=20000)
+
+
+class PolicySimulateResponse(BaseModel):
+    decisions_analyzed: int
+    changes: list[dict] = Field(default_factory=list)
+    summary: dict = Field(default_factory=dict)
+    applied: bool = False
+    note: str = ""

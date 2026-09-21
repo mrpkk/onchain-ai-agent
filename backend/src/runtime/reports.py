@@ -15,7 +15,9 @@ from typing import Sequence
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..db import DecisionRepository, TransactionRepository
+from ..db import Agent, DecisionRepository, PolicyRepository, TransactionRepository
+from ..security.dharma import compile_yaml
+from .tiers import tier_simulation_mode, trust_ladder_rung
 
 __all__ = ["build_summary", "decisions_csv", "transactions_csv"]
 
@@ -25,8 +27,26 @@ async def build_summary(session: AsyncSession, agent_id: uuid.UUID) -> dict:
     txs = await TransactionRepository(session).list_for_agent(agent_id, limit=1000)
     gas_eth = sum((t.gas_used or 0) * (t.gas_price_gwei or 0.0) for t in txs) / 1e9
     confirmed = sum(1 for t in txs if t.status == "confirmed")
+    agent_row = await session.get(Agent, agent_id)
+    policy_row = await PolicyRepository(session).get_active(agent_id)
+    undo_window = 0
+    approvals_amount = 0.0
+    if policy_row is not None:
+        try:
+            compiled = compile_yaml(policy_row.dsl_yaml)
+            undo_window = compiled.model.undo.window_seconds
+            approvals_amount = compiled.model.approvals.required_if.amount_eth_gte
+        except Exception:  # noqa: BLE001 — политика не должна ломать отчёт
+            pass
+    trust = trust_ladder_rung(
+        int(getattr(agent_row, "tier", 0) or 0),
+        simulation_mode=tier_simulation_mode(int(getattr(agent_row, "tier", 0) or 0)),
+        undo_window_seconds=undo_window,
+        approvals_amount_eth=approvals_amount,
+    )
     return {
         "agent_id": str(agent_id),
+        "trust": trust,
         "decisions_count": decisions_count,
         "transactions_count": len(txs),
         "transactions_confirmed": confirmed,

@@ -56,6 +56,7 @@ def test_static_assets_served(client):
         ("/static/dashboard.js", "approvalCard"),
         ("/static/dashboard.js", "parsePolicyRule"),
         ("/static/dashboard.js", "applyPolicyRule"),
+        ("/static/dashboard.js", "simulatePolicyRule"),
         ("/static/dashboard.js", "refreshReport"),
         ("/static/dashboard.css", ".onb-card"),
         ("/static/manifest.webmanifest", "KARTA"),

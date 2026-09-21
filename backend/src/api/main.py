@@ -40,6 +40,8 @@ from .models import (
     PolicyFromTextResponse,
     PolicyPutRequest,
     PolicyResponse,
+    PolicySimulateRequest,
+    PolicySimulateResponse,
     PolicyValidateRequest,
     PolicyValidateResponse,
     RefreshRequest,
@@ -58,6 +60,7 @@ from ..db import (AgentRepository, ApprovalRepository, DecisionRepository, Polic
 from ..runtime import TIER_POLICY_TEMPLATES, build_agent
 from ..runtime.approvals import resolve_approval
 from ..runtime.health_score import compute_health_score
+from ..runtime.policy_simulator import simulate_policy_change
 from ..runtime.reports import build_summary, decisions_csv, transactions_csv
 from ..runtime import manager as runtime_manager
 from ..security.dharma import PolicyError, TxContext, build_default_policy, compile_yaml, evaluate
@@ -822,6 +825,24 @@ async def put_agent_policy(
             agent.id, body.dsl_yaml, _compiled_to_dict(compiled),
         )
         return _policy_to_response(policy)
+
+
+@app.post("/api/v1/agents/{agent_id}/policy/simulate",
+          response_model=PolicySimulateResponse)
+async def simulate_agent_policy(
+    agent_id: str,
+    body: PolicySimulateRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    """Policy Simulator: влияние кандидата на историю решений (без применения)."""
+    try:
+        compile_yaml(body.dsl_yaml)
+    except PolicyError as e:
+        raise HTTPException(status_code=422, detail=f"Invalid policy: {e}")
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+        return await simulate_policy_change(session, agent.id, body.dsl_yaml,
+                                            chain_id=agent.chain_id)
 
 
 @app.post("/api/v1/policies/validate", response_model=PolicyValidateResponse)

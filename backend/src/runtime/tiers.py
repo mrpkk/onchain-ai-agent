@@ -84,3 +84,30 @@ def tier_default_limits(tier: int) -> tuple[float, float]:
 
 def tier_policy_template(tier: int) -> str:
     return TIER_POLICY_TEMPLATES.get(int(tier), TIER_POLICY_TEMPLATES[0])
+
+
+TRUST_LADDER = ["observe", "suggest", "simulate", "approve", "limited_auto", "autonomous"]
+
+
+def trust_ladder_rung(tier: int, *, simulation_mode: bool = True,
+                      undo_window_seconds: int = 0,
+                      approvals_amount_eth: float = 0.0) -> dict:
+    """Текущая ступень доверия (наблюдаемая, без авто-изменений).
+
+    Маппинг честный и консервативный:
+      tier 0-1 → simulate (исполнение выключено)
+      tier 2  → approve (если есть окно undo/порог аппрува) иначе limited_auto
+      tier 3  → autonomous (если окно undo выключено) иначе limited_auto
+    """
+    if int(tier) <= 1 or simulation_mode:
+        rung = "simulate"
+    elif int(tier) == 2:
+        rung = "approve" if (undo_window_seconds > 0 or approvals_amount_eth > 0) else "limited_auto"
+    else:
+        rung = "autonomous" if undo_window_seconds == 0 else "limited_auto"
+    return {
+        "rung": rung,
+        "rung_index": TRUST_LADDER.index(rung),
+        "ladder": TRUST_LADDER,
+        "tier": int(tier),
+    }

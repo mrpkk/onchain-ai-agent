@@ -645,14 +645,34 @@ function renderPolicyPreview(res) {
   if (res.dsl_yaml) card.appendChild(el("div", "params", res.dsl_yaml));
   (res.warnings || []).forEach((w) => card.appendChild(el("div", "warn-list", w)));
 
+  const impact = el("div", "warn-list");
+  card.appendChild(impact);
+
   const actions = el("div", "intent-actions");
+  const simBtn = el("button", "btn ghost small", t("policy.simulate"));
+  simBtn.onclick = () => simulatePolicyRule(impact);
   const applyBtn = el("button", "btn primary small", t("policy.apply"));
   applyBtn.onclick = () => applyPolicyRule();
   const cancelBtn = el("button", "btn ghost small", t("btn.cancel"));
   cancelBtn.onclick = () => { POLICY_PREVIEW = null; box.replaceChildren(); };
-  actions.append(applyBtn, cancelBtn);
+  actions.append(simBtn, applyBtn, cancelBtn);
   card.appendChild(actions);
   box.appendChild(card);
+}
+
+async function simulatePolicyRule(impactBox) {
+  if (!POLICY_PREVIEW || !POLICY_PREVIEW.dsl_yaml || !SELECTED) return;
+  impactBox.textContent = t("chat.parsing");
+  const res = await api("/api/v1/agents/" + SELECTED + "/policy/simulate",
+                        { method: "POST", body: { dsl_yaml: POLICY_PREVIEW.dsl_yaml } });
+  if (res.detail) { impactBox.textContent = res.detail; return; }
+  const s = res.summary || {};
+  const lines = [t("policy.impact", { tightened: s.tightened || 0, relaxed: s.relaxed || 0, unchanged: s.unchanged || 0 })];
+  (res.changes || []).slice(0, 5).forEach((c) => {
+    lines.push("• " + c.action + ": " + c.before + " → " + c.after);
+  });
+  lines.push(res.note || "");
+  impactBox.textContent = lines.join("\n");
 }
 
 async function applyPolicyRule() {
@@ -687,6 +707,12 @@ async function refreshReport() {
     row.appendChild(el("span", "mono", String(value)));
     box.appendChild(row);
   });
+  if (res.trust) {
+    const tr = el("div", "status-line");
+    tr.appendChild(el("span", "muted", t("report.autonomy")));
+    tr.appendChild(el("span", "mono", res.trust.rung + " (" + (res.trust.rung_index + 1) + "/" + res.trust.ladder.length + ")"));
+    box.appendChild(tr);
+  }
   if (res.health) {
     const h = el("div", "status-line");
     h.appendChild(el("span", "muted", t("report.health")));
