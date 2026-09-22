@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     # Blockchain
-    ethereum_rpc_url: str = "https://eth.llamarpc.com"
+    ethereum_rpc_url: str = "https://ethereum-rpc.publicnode.com"  # проверен из РФ 2026-09-22 (306ms); запас: eth.drpc.org, 1rpc.io/eth
     chain_id: int = 1
     agent_wallet_private_key: str = ""
 

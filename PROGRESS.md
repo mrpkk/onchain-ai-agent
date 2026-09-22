@@ -28,14 +28,16 @@
 5. **18.09.2026** — SPEC v3 (судья-синтез) канонизирован; убраны противоречия (JWT 15м/7д, 4 тира, Hardhat+anvil, без SSE).
 6. **16.09.2026** — ключи `backend/.env` (права 664!) → план переноса в `~/.env` chmod 600 (STOP GATE, ждёт решения).
 7. Футуристики: комбо **F3→F2→F1→F8→F5** рекомендовано; внедрение — только по решению (FUTURE LAB).
+8. **22.09.2026** — **лого K (монограмма) выбрано владельцем**; ассеты собраны и встроены (S4-09 ✅). **v2.0-alpha смержен в main** (тег `v2.0-alpha`, merge `4b8b7d3`).
+9. **22.09.2026** — **бесплатные инструменты ≤1 ГБ — ставить/использовать без спроса** (правило владельца, записано в AGENTS.md); >1 ГБ или платное — спрашивать.
+10. **22.09.2026** — **P6 «Агент-экономика» начат** по команде владельца («начинай, всё что в SPEC»); порядок по умолчанию S6-04 → S6-03 → S6-01 → S6-02 (старт не требует P5). **Āgama: публикация отложена** («продукт сырой — сначала тесты/доработка»).
 
 ## 🧭 ТЕКУЩИЙ ШАГ (обновлять при каждом слайсе)
 
-**Статус:** P0 закрыт 100%; **P1 «Безопасность» — ЗАКРЫТА 9/9** (S1-01 секреты+CI · S1-02 Argon2id · S1-03 JWT · S1-04 KeyVault · S1-05 approve · S1-06 Dharma · S1-07 контракты+CI · S1-08 kill-drill · S1-09 health) (S1-02 · S1-04 · S1-05 · S1-06 · S1-08 · S1-09 · S1-03 · S1-07). Тесты: **140 зелёных** (backend 84 + контракты 56). Раннеры: `backend/.venv/bin/python -m pytest` и `npx hardhat test` (smart-contracts).
-**LIVE E2E СМОУК (18.09):** ✅ register→token→agent→policy→WS→start→tick→LLM-решение→БД→аудит→heartbeat→stop. Найден и исправлен **латентный баг** (не ловился юнит-тестами): `_tick` обращался к `self.current_plan` вместо `self.state.current_plan` — цикл никогда не запускался end-to-end до этого дня. Добавлен Sakshi-аудит жизненного цикла (agent_started/agent_stopped/tick_error) + 2 регрессионных теста. Живые результаты: решение GigaChat "hold" (confidence 1.0) в `decisions`; audit-цепочка: agent_started(b28e12…) → decision_made(af4a83…); WS: hello→agent.status(running)→decision.proposed. Коммит `470d45b`.
-
-**Следом (P3, по команде):** S3-01 ✅ → S3-02 Simulation-гейт (eth_call + anvil когда доступен), S3-03 timelock/undo, S3-04 dead-man switch, S3-05 Guardian. **P2 закрыта 8/8.** Прежний план: S2-01 ✅ → далее S2-02 Sakshi Log (HMAC-цепочка, запись каждого решения в `audit_events`), S2-03 WS-события, S2-05 LLMProvider+structured output, S2-07 Mempool real/NOT_IMPLEMENTED, S2-08 README=код. Плюс долг: RefreshStore → таблица `refresh_tokens` (сейчас in-memory), decision-diary запись в `decisions` (таблица готова).
-**Открытые STOP-GATE (6):** (1) execution-граница v2 = READ+SIMULATE+PROPOSE? (2) PG локально через docker-compose? (3) DeepSeek-ключ в `~/.env`? (4) перенос `backend/.env` → `~/.env` chmod 600? (5) футуристики F3→F2→F1→F8→F5? (6) фронтенд A (server-rendered, рекомендован) или B (React SPA)?
+**Статус:** **P0–P4 закрыты полностью** (P4 = 10/10 после S4-09; сверх плана закрыты S4-15 SAST/dep-audit, S4-16 docs-пакет, S4-17 ops-реконсиляция). **v2.0-alpha в main** (тег, merge `4b8b7d3`). Тесты: **223 backend + 56 контрактных** (вкл. coverage-гейт 80%, bandit medium+ = 0, pip-audit = 0). Live E2E: `scripts/e2e_live.py` 13/13.
+**Инфраструктура P5 (22.09):** **RPC ✅ работает из РФ** — `ethereum-rpc.publicnode.com` (306ms, дефолт в settings), запас `eth.drpc.org`, `1rpc.io/eth`; health показывает `rpc: ok` (реальный блок mainnet). **Foundry ✅** установлен (forge/cast/anvil 1.8.1, up to date). **4337 — локальный EntryPoint** (решение владельца). **Sepolia-деплой** — ждёт решения владельца («зачем?» — объяснение в отчёте 22.09; вопрос «деплоим сейчас/после P5»).
+**P6 стартовал (22.09):** S6-04 MCP-сервер наружу (рекомендация: local-first) → S6-03 Ricardian UI → S6-01 ERC-8004 (local) → S6-02 Escrow (local) → on-chain часть после P5.
+**STOP-GATE (ранее 6) — ЗАКРЫТЫ все:** execution-граница = тиры 0–1 симуляция (реальное — P5); PG docker ✅; DeepSeek-ключ ✅; `backend/.env` выведен из контура ✅; фронтенд A ✅; футуристики — в P7 (по решению).
 
 ---
 
@@ -107,7 +109,7 @@
 - [x] S4-06 Telegram-approve: `integrations/telegram.py` (Bot API на httpx, inline-кнопки ✅/❌, `parse_callback`), `telegram_poller.py` (long-poll → **общий** `resolve_approval`), `runtime/approvals.py` (**единый путь web/TG**: одобрение → `runtime.execute_intent` → полный контур policy/sim/timelock — Telegram НЕ обходит policy), `ApprovalRepository` + API (`GET /approvals`, `POST /approvals/{id}/approve|reject` с ownership-изоляцией), ядро: requires_approval/ask_human → заявка + WS `approval.requested` + notifier; health: telegram configured/not_configured; lifespan запускает poller при наличии токена. **Конфиг:** `KARTA_TELEGRAM_BOT_TOKEN` + `KARTA_TELEGRAM_CHAT_ID` (fallback TG_USER_ID); токена нет → интеграция честно в disabled (создание бота — действие владельца через BotFather). 8 тестов (Bot API через MockTransport, poll-loop, сервис, API-флоу, core-тик). Коммит `78b7c30`.
 - [x] S4-07 Отчёты: `runtime/reports.py` — честная сводка (`decisions_count`, транзакции/confirmed, **газ из реальных полей** в ETH, `pnl_available=False` + причина «нет сделок/цен (Phase 5)» — никаких выдуманных PnL) и CSV-билдеры; API **GET /agents/{id}/reports/summary** и **GET /agents/{id}/export.csv?dataset=decisions|transactions|audit** (audit — через Sakshi export_csv, attachment). UI: панель «Отчёты» (сводка + 3 кнопки CSV-скачивания через fetch+blob). 6 тестов. Коммит `fe39db9`. Долг: расчёт PnL (cost basis/цены) — при появлении исполнения и ценового оракула.
 - [x] S4-08 i18n RU/EN: `static/i18n.js` (два словаря ~130 ключей, `t()` c подстановками, переключатель в топбаре, persist `karta_lang`, автодетект языка; архитектура расширяема DE/ES/FR/ZH), вся разметка через **data-i18n/data-i18n-placeholder**, JS-строки переведены на ключи, `onLangChanged` перерисовывает динамику; тест **паритета ключей RU==EN**. Landing/docs: README = код (S2-08), Swagger /docs, экран входа — точка входа; отдельный маркетинговый лендинг — при публикации (STOP-GATE бренда). Коммит `41eb781`.
-- [~] S4-09 KARTA-ассеты: подготовка готова — `branding/preview.html` (сравнение 3 концептов, размеры 16→128, темы) + `branding/generate_assets.sh` (SVG→icon 16/32/48/180/512 + apple-touch + OG 1200×630; проверен на чакре → `branding/out-demo/`). **Ждёт выбор: чакра / K / щит.**
+- [x] S4-09 KARTA-ассеты: **выбрано владельцем 22.09 — лого K (монограмма)**: PNG-набор (16/32/48/180/512 + apple-touch + OG 1200×630) в `branding/out/`, встроен в кокпит (`static/icons/`: favicon, apple-touch, og-теги) и PWA-манифест (иконки 5 размеров); 2 новых теста (ассеты отдаются, манифест объявляет). Коммит `38dcf8c`. **P4 закрыта 10/10.**
 - [x] S4-10 Дифференциаторы (реализовано 2 ключевых): **Intent→Guarantee** — `agent/policy_intent.py` (NL-правило → pydantic-патч → merge с активной политикой → валидация Dharma → YAML-превью; применение ТОЛЬКО через явный PUT с новой версией) + API `POST /agents/{id}/policy/from-text` + панель «Правила (Dharma)» в кокпите; **Agent Health Score** — `runtime/health_score.py` (penalty из policy-отказов/провальных решений/доли провальных tx; band healthy/degraded/critical + рекомендация — совет, не автомат), встроен в reports/summary + строка «Здоровье» в UI. Остальные (Counterfactual/Drift/Ladder/Replay/Policy Simulator) — зафиксированы как кандидаты P7 (после появления исполнения данные станут полнее). 10 тестов. Коммит `061bee6`.
 
 - [x] S4-11 Policy Simulator: `runtime/policy_simulator.py` — прогон последних решений через текущую и кандидатную политики → изменения вердиктов (tightened/relaxed/unchanged) БЕЗ применения; API `POST /agents/{id}/policy/simulate` + кнопка «Симулировать» в панели правил (impact-превью до «Применить»). 4 теста.
@@ -123,16 +125,18 @@
 
 > **P5-ПЛАН К ОБСУЖДЕНИЮ (ИСПОЛНЕНИЕ ТОЛЬКО ПО ОТДЕЛЬНОЙ КОМАНДЕ — STOP-GATE).**
 >
-> **Предусловия (инфраструктура):**
-> 1. **Рабочий RPC** — сейчас внешние eth-RPC недоступны из нашей сети. Варианты: публичный RPC через Tor/прокси, РФ-совместимый RPC, платный (нет бюджета → STOP). Без RPC S5-01/02 проверяются только fork-тестами (anvil на локальном снапшоте).
-> 2. **Foundry (anvil/cast)** — локальная установка бесплатна; нужна для fork-тестов и digital-twin (F2). Прошу разрешение.
-> 3. **Бюджет тестов:** real-money нет; Sepolia-краник 0.06 ETH/сутки — только критичные e2e.
+> **Предусловия (инфраструктура) — ОБНОВЛЕНО 22.09:**
+> 1. **Рабочий RPC ✅ РЕШЕНО (бесплатно, проверено из РФ):** `ethereum-rpc.publicnode.com` (306ms; дефолт в `settings.py`), запас: `eth.drpc.org` (270ms), `1rpc.io/eth` (501ms); Sepolia: `ethereum-sepolia-rpc.publicnode.com` (322ms), `1rpc.io/sepolia`. Health: `rpc: ok` (блок mainnet читается). Ankr/LlamaRPC из РФ не работают (ключ/SSL).
+> 2. **Foundry ✅ УСТАНОВЛЕН** (владелец разрешил 22.09): forge/cast/anvil 1.8.1 в `~/.foundry/bin`, up to date.
+> 3. **Бюджет тестов:** real-money нет; Sepolia-краник бесплатно (Google Cloud ~0.05 ETH/24ч — требует 0.001 ETH mainnet; PoW-кран pk910 — без требований; Alchemy 0.1 ETH/день — требует 0.001 mainnet).
+> 4. **4337:** только локальный EntryPoint (решение владельца 22.09); bundler/paymaster платные — не используем.
+> 5. **Sepolia-деплой:** ждёт решения владельца (вопрос «зачем» — объяснено в отчёте 22.09: реальные условия сети, верификация контрактов в explorer, e2e на живой сети, подготовка P6/портфолио).
 >
 > **Смета (соло+AI):** S5-04 EIP-1559 — 1 дн · S5-05 private RPC — 1 дн · S5-07 multi-chain (+Base) — 2–3 дн · S5-01 swap (агрегатор+slippage-guard) — 3–4 дн · S5-02 bridge — 2–3 дн · S5-06 ERC-4337 (session keys по готовой таблице; bundler/paymaster платные → локальный EntryPoint в тестах) — 4–6 дн · S5-03 deploy Sepolia — 1–2 дн (отдельная команда). **Итого ≈ 3–4 недели.**
 >
 > **Порядок по умолчанию:** S5-04 → S5-05 → S5-07 → S5-01 → S5-02 → S5-06 → S5-03.
 >
-> **Вопросы владельцу:** (1) RPC-канал для dev/e2e? (2) ставим Foundry локально? (3) 4337 — только локальный EntryPoint до отдельного решения? (4) деплой контрактов на Sepolia — когда и какие?
+> **Вопросы владельцу — ОТВЕТЫ 22.09:** (1) RPC — ✅ бесплатные РФ-доступные (проверены живьём, дефолт PublicNode); (2) Foundry — ✅ ставим (установлен 1.8.1); (3) 4337 — ✅ только локальный EntryPoint; (4) Sepolia — вопрос «зачем» задан владельцем, объяснение дано; **ждёт: деплоим сейчас / после кода P5**. Старт P5 — по команде («запускай P5»/«запускай S5-04»).
 
 - [ ] S5-01 Swap (1inch/агрегатор + slippage-guard) · S5-02 Bridge · S5-03 Deploy
 - [ ] S5-04 EIP-1559 + газ-оракул · S5-05 Private RPC (Flashbots-класс) + jitter
@@ -141,7 +145,9 @@
 
 ### P6 — Агент-экономика (по решению)
 
-> **P6-ПЛАН К ОБСУЖДЕНИЮ (исполнение — только по отдельной команде).**
+> **СТАТУС 22.09: НАЧАТ по команде владельца («начинай, всё что в SPEC»).** Порядок: S6-04 → S6-03 → S6-01(local) → S6-02(local) → on-chain часть после P5 → S6-05 (решение).
+>
+> **P6-ПЛАН (исполнение — по слайсам, канон SPEC).**
 >
 > **Что уже есть:** контракты `AgentRegistry` / `Escrow` / `RicardianAgreement` (компилируются, 56 тестов, Slither+Aderyn в CI); Sakshi-аудит; Dharma-гейты; кокпит; approvals-путь.
 > **Предусловия:** S6-01/S6-02 в on-chain части требуют P5 (реальное исполнение; иначе — только локальные devnets); S6-04 (MCP наружу) — сетевая точка присутствия (домен/порт) и решение о том, кому открывать; S6-05 x402 — STOP GATE (приём крипто-платежей).
@@ -188,6 +194,8 @@ F1 Gasless ERC-4337 · F2 Digital twin · F3 Copilot · F4 Intent-engine · F5 �
 | 22 | 2026-09-18 | S4-15 SAST/dep-audit (CA НУЦ, PyJWT, CI bandit+pip-audit) | `51d8e73` | 218/218 | bandit medium+ 0 · pip-audit 0 |
 | 23 | 2026-09-18 | S4-16 Docs-пакет (SECURITY/ARCHITECTURE/API + генератор) + fix compose redis-profile | `c3b6f7b` | 218/218 | API.md авто-генерация; compose валидирован |
 | 24 | 2026-09-18 | S4-17 Реконсиляция при старте + coverage-гейт + e2e_live.py в репо + README-синк | `58fcfe6` `c5ced6d` | 221/221 + live-смоук 13/13 | честные состояния после падения процесса |
+| 25 | 2026-09-22 | **Мерж v2.0-alpha в main** (тег, merge `4b8b7d3`) + **S4-09 лого K** (ассеты+кокпит+манифест, `38dcf8c`) | `4b8b7d3` `38dcf8c` | 223/223 | P4 закрыта 10/10; выбор лого владельцем |
+| 26 | 2026-09-22 | Инфра P5: **RPC из РФ проверен** (publicnode/drpc/1rpc; дефолт обновлён) + **Foundry 1.8.1** + `TG_KARTA_BOT`-алиас + правило ≤1ГБ | (в этом коммите) | 223/223 + health rpc:ok | health: rpc ok (блок mainnet) |
 
 ## 💡 ИДЕИ НА ОБСУЖДЕНИЕ (новое — предлагать после отчётов)
 

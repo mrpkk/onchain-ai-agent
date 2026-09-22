@@ -103,7 +103,10 @@ class TelegramNotifier:
 
 
 def notifier_from_env() -> Optional[TelegramNotifier]:
-    token = os.getenv("KARTA_TELEGRAM_BOT_TOKEN", "").strip()
+    token = (
+        os.getenv("KARTA_TELEGRAM_BOT_TOKEN", "").strip()
+        or os.getenv("TG_KARTA_BOT", "").strip()
+    )
     chat = os.getenv("KARTA_TELEGRAM_CHAT_ID", "").strip() or os.getenv("TG_USER_ID", "").strip()
     if not token or not chat:
         return None
