@@ -34,6 +34,7 @@ from .models import (
     AuditEventResponse,
     AuditListResponse,
     DecisionListResponse,
+    DecisionReplayResponse,
     DecisionResponse,
     KillSwitchRequest,
     PendingListResponse,
@@ -59,7 +60,9 @@ from ..db import (AgentRepository, ApprovalRepository, DecisionRepository, Polic
                   TransactionRepository, UserRepository, create_all, session_scope)
 from ..runtime import TIER_POLICY_TEMPLATES, build_agent
 from ..runtime.approvals import resolve_approval
+from ..runtime.drift import detect_drift
 from ..runtime.health_score import compute_health_score
+from ..runtime.replay import replay_decision
 from ..runtime.policy_simulator import simulate_policy_change
 from ..runtime.reports import build_summary, decisions_csv, transactions_csv
 from ..runtime import manager as runtime_manager
@@ -711,6 +714,38 @@ async def list_decisions(
         total = await repo.count_for_agent(agent.id)
         items = [_decision_to_response(row) for row in rows]
     return DecisionListResponse(decisions=items, total=total)
+
+
+@app.get("/api/v1/agents/{agent_id}/drift")
+async def agent_drift(
+    agent_id: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    """Autonomy Drift Detection (S4-13): сигналы отклонений поведения."""
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+        return await detect_drift(session, agent.id)
+
+
+@app.get("/api/v1/decisions/{decision_id}", response_model=DecisionReplayResponse)
+async def get_decision_replay(
+    decision_id: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    """Decision Replay v1 (S4-14): решение + вердикт текущей политики."""
+    try:
+        did = uuid.UUID(decision_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Decision not found")
+    async with session_scope() as session:
+        decision = await DecisionRepository(session).get(did)
+        if decision is None:
+            raise HTTPException(status_code=404, detail="Decision not found")
+        agent = await AgentRepository(session).get(decision.agent_id)
+        if agent is None or str(agent.owner_id) != current_user["id"]:
+            raise HTTPException(status_code=404, detail="Decision not found")
+        replay = await replay_decision(session, did)
+    return DecisionReplayResponse(**replay)
 
 
 @app.get("/api/v1/agents/{agent_id}/audit", response_model=AuditListResponse)

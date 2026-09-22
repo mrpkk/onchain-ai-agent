@@ -441,7 +441,32 @@ function decisionCard(d) {
   if (d.policy_verdict) lines.push("policy_verdict: " + JSON.stringify(d.policy_verdict, null, 2));
   details.textContent = lines.join("\n");
   why.onclick = () => { details.style.display = details.style.display === "none" ? "block" : "none"; };
-  card.append(why, details);
+
+  const replay = el("button", "why-btn", t("btn.replay"));
+  replay.style.marginLeft = "10px";
+  const replayBox = el("div", "why-details");
+  replayBox.style.display = "none";
+  replay.onclick = async () => {
+    if (replayBox.style.display === "none") {
+      const r = await api("/api/v1/decisions/" + d.id);
+      if (r.detail) { replayBox.textContent = r.detail; }
+      else {
+        const thenVerdict = r.then ? r.then.decision : "—";
+        const nowVerdict = r.now ? r.now.decision : "—";
+        replayBox.textContent = [
+          t("replay.then") + ": " + thenVerdict,
+          t("replay.now") + ": " + nowVerdict,
+          r.verdict_changed ? t("replay.changed") : t("replay.unchanged"),
+          r.note || "",
+        ].join("\n");
+      }
+      replayBox.style.display = "block";
+    } else {
+      replayBox.style.display = "none";
+    }
+  };
+
+  card.append(why, replay, details, replayBox);
   return card;
 }
 
@@ -695,6 +720,8 @@ async function refreshReport() {
   if (!SELECTED) { box.replaceChildren(el("div", "empty", t("empty.none"))); return; }
   const res = await api("/api/v1/agents/" + SELECTED + "/reports/summary");
   if (res.detail) { box.replaceChildren(el("div", "empty", res.detail)); return; }
+  const drift = await api("/api/v1/agents/" + SELECTED + "/drift");
+  if (!drift.detail) res.drift = drift;
   box.replaceChildren();
   const lines = [
     [t("report.decisions"), res.decisions_count],
@@ -707,6 +734,16 @@ async function refreshReport() {
     row.appendChild(el("span", "mono", String(value)));
     box.appendChild(row);
   });
+  if (res.drift) {
+    const dr = el("div", "status-line");
+    dr.appendChild(el("span", "muted", t("report.drift")));
+    const driftClass = res.drift.level === "stable" ? "risk-low" : res.drift.level === "watch" ? "risk-medium" : "risk-high";
+    dr.appendChild(el("span", "badge " + driftClass, t("drift." + res.drift.level) + " · " + res.drift.drift_score));
+    box.appendChild(dr);
+    (res.drift.signals || []).forEach((sig) => {
+      box.appendChild(el("div", "warn-list", "• " + sig.type + ": " + sig.detail));
+    });
+  }
   if (res.trust) {
     const tr = el("div", "status-line");
     tr.appendChild(el("span", "muted", t("report.autonomy")));

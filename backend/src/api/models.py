@@ -271,3 +271,13 @@ class PolicySimulateResponse(BaseModel):
     summary: dict = Field(default_factory=dict)
     applied: bool = False
     note: str = ""
+
+
+# ── Drift / Replay (S4-13/S4-14) ──────────────────────────────────────
+
+class DecisionReplayResponse(BaseModel):
+    decision: dict = Field(default_factory=dict)
+    then: Optional[dict] = None
+    now: dict = Field(default_factory=dict)
+    verdict_changed: bool = False
+    note: str = ""
