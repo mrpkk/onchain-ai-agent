@@ -74,6 +74,26 @@ def test_manifest_is_valid_json(client):
     assert data["theme_color"] == "#0A0E17"
 
 
+def test_manifest_declares_icons(client):
+    """S4-09: PWA-манифест объявляет набор иконок логотипа."""
+    data = json.loads(client.get("/static/manifest.webmanifest").text)
+    sizes = {icon["sizes"] for icon in data["icons"]}
+    assert {"16x16", "32x32", "48x48", "180x180", "512x512"} <= sizes
+
+
+def test_brand_assets_served(client):
+    """S4-09: PNG-ассеты монограммы K отдаются и подключены в кокпите."""
+    body = client.get("/").text
+    assert "/static/icons/icon-32.png" in body
+    assert "/static/icons/apple-touch-icon.png" in body
+    assert "/static/icons/og-image.png" in body
+    for icon in ("icon-16.png", "icon-32.png", "icon-48.png", "icon-180.png",
+                 "icon-512.png", "apple-touch-icon.png", "og-image.png"):
+        response = client.get(f"/static/icons/{icon}")
+        assert response.status_code == 200, icon
+        assert response.content[:8] == b"\x89PNG\r\n\x1a\n", icon
+
+
 def test_dashboard_ids_present(client):
     """Ключевые id разметки на месте (связность HTML↔JS после выноса)."""
     body = client.get("/").text
