@@ -34,7 +34,7 @@
 
 ## 🧭 ТЕКУЩИЙ ШАГ (обновлять при каждом слайсе)
 
-**Статус:** **P0–P4 закрыты полностью** (P4 = 10/10 после S4-09; сверх плана закрыты S4-15 SAST/dep-audit, S4-16 docs-пакет, S4-17 ops-реконсиляция). **v2.0-alpha в main** (тег, merge `4b8b7d3`). Тесты: **223 backend + 56 контрактных** (вкл. coverage-гейт 80%, bandit medium+ = 0, pip-audit = 0). Live E2E: `scripts/e2e_live.py` 13/13.
+**Статус:** **P0–P4 закрыты полностью** (P4 = 10/10 после S4-09; сверх плана закрыты S4-15 SAST/dep-audit, S4-16 docs-пакет, S4-17 ops-реконсиляция). **v2.0-alpha в main** (тег, merge `4b8b7d3`). Тесты: **225 backend + 56 контрактных** (вкл. coverage-гейт 80%, bandit medium+ = 0, pip-audit = 0). Live E2E: `scripts/e2e_live.py` 13/13.
 **Инфраструктура P5 (22.09):** **RPC ✅ работает из РФ** — `ethereum-rpc.publicnode.com` (306ms, дефолт в settings), запас `eth.drpc.org`, `1rpc.io/eth`; health показывает `rpc: ok` (реальный блок mainnet). **Foundry ✅** установлен (forge/cast/anvil 1.8.1, up to date). **4337 — локальный EntryPoint** (решение владельца). **Sepolia-деплой** — ждёт решения владельца («зачем?» — объяснение в отчёте 22.09; вопрос «деплоим сейчас/после P5»).
 **P6 стартовал (22.09):** S6-04 MCP-сервер наружу (рекомендация: local-first) → S6-03 Ricardian UI → S6-01 ERC-8004 (local) → S6-02 Escrow (local) → on-chain часть после P5.
 **STOP-GATE (ранее 6) — ЗАКРЫТЫ все:** execution-граница = тиры 0–1 симуляция (реальное — P5); PG docker ✅; DeepSeek-ключ ✅; `backend/.env` выведен из контура ✅; фронтенд A ✅; футуристики — в P7 (по решению).
@@ -194,7 +194,7 @@ F1 Gasless ERC-4337 · F2 Digital twin · F3 Copilot · F4 Intent-engine · F5 �
 | 22 | 2026-09-18 | S4-15 SAST/dep-audit (CA НУЦ, PyJWT, CI bandit+pip-audit) | `51d8e73` | 218/218 | bandit medium+ 0 · pip-audit 0 |
 | 23 | 2026-09-18 | S4-16 Docs-пакет (SECURITY/ARCHITECTURE/API + генератор) + fix compose redis-profile | `c3b6f7b` | 218/218 | API.md авто-генерация; compose валидирован |
 | 24 | 2026-09-18 | S4-17 Реконсиляция при старте + coverage-гейт + e2e_live.py в репо + README-синк | `58fcfe6` `c5ced6d` | 221/221 + live-смоук 13/13 | честные состояния после падения процесса |
-| 25 | 2026-09-22 | **Мерж v2.0-alpha в main** (тег, merge `4b8b7d3`) + **S4-09 лого K** (ассеты+кокпит+манифест, `38dcf8c`) | `4b8b7d3` `38dcf8c` | 223/223 | P4 закрыта 10/10; выбор лого владельцем |
+| 25 | 2026-09-22 | **Мерж v2.0-alpha в main** (тег, merge `4b8b7d3`) + **S4-09 лого K** (ассеты+кокпит+манифест, `38dcf8c`) | `4b8b7d3` `38dcf8c` | 225/225 | P4 закрыта 10/10; выбор лого владельцем |
 | 26 | 2026-09-22 | Инфра P5: **RPC из РФ проверен** (publicnode/drpc/1rpc; дефолт обновлён) + **Foundry 1.8.1** + `TG_KARTA_BOT`-алиас + правило ≤1ГБ | (в этом коммите) | 223/223 + health rpc:ok | health: rpc ok (блок mainnet) |
 
 ## 💡 ИДЕИ НА ОБСУЖДЕНИЕ (новое — предлагать после отчётов)
