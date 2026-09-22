@@ -115,6 +115,7 @@
 
 - [x] S4-13 Autonomy Drift Detection: `runtime/drift.py` — сравнение окон истории (средняя сумма, новые типы действий, рост high/critical-риска) → сигналы + drift_score/level (stable/watch/drift); API `GET /agents/{id}/drift` + строка «Дрейф» с сигналами в отчётах. 3 теста.
 - [x] S4-14 Decision Replay v1: `runtime/replay.py` — восстановление решения + вердикт **текущей** политики vs сохранённого (`verdict_changed`); API `GET /decisions/{id}` (ownership) + кнопка «Переиграть» в карточке решения. 2 теста. Коммит `30e7381`.
+- [x] S4-15 SAST + dep-audit (секьюрити-долг P1): **bandit medium+ = 0 находок** — GigaChat переведён с `verify=False` на CA-бандл **НУЦ Минцифры** (`backend/src/security/certs/russian_trusted_root_ca.pem`, env-override `GIGACHAT_CA_BUNDLE`, честный warning-fallback), `settings.host` дефолт → `127.0.0.1` (деплой переопределяет: Dockerfile `--host 0.0.0.0`); **pip-audit = 0 уязвимостей** — миграция `python-jose`→**PyJWT 2.14** (у python-jose транзитивный `ecdsa` с PYSEC-2026-1325 без фикса; PyJWT на `cryptography`, HS256-путь без изменений API токенов). CI: шаги **bandit (medium+, strict)** + **pip-audit (strict)**. Живой регресс: **E2E v2** (13 проверок — live GigaChat policy from-text, intent, WS, decisions, drift, replay, summary, CSV, approvals, Sakshi-цепочка) — всё зелёное; JWT после миграции проверен на живом сервере. 218/218. Коммит `51d8e73`.
 
 ### P5 — Исполнение 2.0
 
@@ -169,6 +170,8 @@ F1 Gasless ERC-4337 · F2 Digital twin · F3 Copilot · F4 Intent-engine · F5 �
 | 18 | 2026-09-18 | S2-08 README=код (сверен с роутами приложения) | `ccafcd0` | 116/116 | P2 закрыта 7/8 (+S2-06 частично) |
 | 19 | 2026-09-18 | S2-06 Трейсинг llm_trace (request_id/agent_id/cost/prompt-version) | `83e5d88` | 122/122 | **P2 ЗАКРЫТА 8/8** |
 | 20 | 2026-09-18 | S3-01 Policy API: версии DSL, validate, ownership | `741a84d` | 128/128 | P3 открыта (1/5) |
+| 21 | 2026-09-18 | S4-01…S4-14 Friendly-ядро (кокпит, чат-first, тиры, approvals+TG, отчёты, i18n, 6 дифференциаторов) | `87ce4dd`..`30e7381` | 218/218 backend + 56 контрактов | E2E v2 live зелёный; P4 9/10 (S4-09 ждёт лого) |
+| 22 | 2026-09-18 | S4-15 SAST/dep-audit (CA НУЦ, PyJWT, CI bandit+pip-audit) | `51d8e73` | 218/218 | bandit medium+ 0 · pip-audit 0 |
 
 ## 💡 ИДЕИ НА ОБСУЖДЕНИЕ (новое — предлагать после отчётов)
 
