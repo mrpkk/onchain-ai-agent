@@ -107,7 +107,7 @@
 - [x] S4-06 Telegram-approve: `integrations/telegram.py` (Bot API на httpx, inline-кнопки ✅/❌, `parse_callback`), `telegram_poller.py` (long-poll → **общий** `resolve_approval`), `runtime/approvals.py` (**единый путь web/TG**: одобрение → `runtime.execute_intent` → полный контур policy/sim/timelock — Telegram НЕ обходит policy), `ApprovalRepository` + API (`GET /approvals`, `POST /approvals/{id}/approve|reject` с ownership-изоляцией), ядро: requires_approval/ask_human → заявка + WS `approval.requested` + notifier; health: telegram configured/not_configured; lifespan запускает poller при наличии токена. **Конфиг:** `KARTA_TELEGRAM_BOT_TOKEN` + `KARTA_TELEGRAM_CHAT_ID` (fallback TG_USER_ID); токена нет → интеграция честно в disabled (создание бота — действие владельца через BotFather). 8 тестов (Bot API через MockTransport, poll-loop, сервис, API-флоу, core-тик). Коммит `78b7c30`.
 - [x] S4-07 Отчёты: `runtime/reports.py` — честная сводка (`decisions_count`, транзакции/confirmed, **газ из реальных полей** в ETH, `pnl_available=False` + причина «нет сделок/цен (Phase 5)» — никаких выдуманных PnL) и CSV-билдеры; API **GET /agents/{id}/reports/summary** и **GET /agents/{id}/export.csv?dataset=decisions|transactions|audit** (audit — через Sakshi export_csv, attachment). UI: панель «Отчёты» (сводка + 3 кнопки CSV-скачивания через fetch+blob). 6 тестов. Коммит `fe39db9`. Долг: расчёт PnL (cost basis/цены) — при появлении исполнения и ценового оракула.
 - [x] S4-08 i18n RU/EN: `static/i18n.js` (два словаря ~130 ключей, `t()` c подстановками, переключатель в топбаре, persist `karta_lang`, автодетект языка; архитектура расширяема DE/ES/FR/ZH), вся разметка через **data-i18n/data-i18n-placeholder**, JS-строки переведены на ключи, `onLangChanged` перерисовывает динамику; тест **паритета ключей RU==EN**. Landing/docs: README = код (S2-08), Swagger /docs, экран входа — точка входа; отдельный маркетинговый лендинг — при публикации (STOP-GATE бренда). Коммит `41eb781`.
-- [ ] S4-09 KARTA-ассеты (после выбора лого владельцем)
+- [~] S4-09 KARTA-ассеты: подготовка готова — `branding/preview.html` (сравнение 3 концептов, размеры 16→128, темы) + `branding/generate_assets.sh` (SVG→icon 16/32/48/180/512 + apple-touch + OG 1200×630; проверен на чакре → `branding/out-demo/`). **Ждёт выбор: чакра / K / щит.**
 - [x] S4-10 Дифференциаторы (реализовано 2 ключевых): **Intent→Guarantee** — `agent/policy_intent.py` (NL-правило → pydantic-патч → merge с активной политикой → валидация Dharma → YAML-превью; применение ТОЛЬКО через явный PUT с новой версией) + API `POST /agents/{id}/policy/from-text` + панель «Правила (Dharma)» в кокпите; **Agent Health Score** — `runtime/health_score.py` (penalty из policy-отказов/провальных решений/доли провальных tx; band healthy/degraded/critical + рекомендация — совет, не автомат), встроен в reports/summary + строка «Здоровье» в UI. Остальные (Counterfactual/Drift/Ladder/Replay/Policy Simulator) — зафиксированы как кандидаты P7 (после появления исполнения данные станут полнее). 10 тестов. Коммит `061bee6`.
 
 - [x] S4-11 Policy Simulator: `runtime/policy_simulator.py` — прогон последних решений через текущую и кандидатную политики → изменения вердиктов (tightened/relaxed/unchanged) БЕЗ применения; API `POST /agents/{id}/policy/simulate` + кнопка «Симулировать» в панели правил (impact-превью до «Применить»). 4 теста.
@@ -117,6 +117,20 @@
 - [x] S4-14 Decision Replay v1: `runtime/replay.py` — восстановление решения + вердикт **текущей** политики vs сохранённого (`verdict_changed`); API `GET /decisions/{id}` (ownership) + кнопка «Переиграть» в карточке решения. 2 теста. Коммит `30e7381`.
 
 ### P5 — Исполнение 2.0
+
+> **P5-ПЛАН К ОБСУЖДЕНИЮ (ИСПОЛНЕНИЕ ТОЛЬКО ПО ОТДЕЛЬНОЙ КОМАНДЕ — STOP-GATE).**
+>
+> **Предусловия (инфраструктура):**
+> 1. **Рабочий RPC** — сейчас внешние eth-RPC недоступны из нашей сети. Варианты: публичный RPC через Tor/прокси, РФ-совместимый RPC, платный (нет бюджета → STOP). Без RPC S5-01/02 проверяются только fork-тестами (anvil на локальном снапшоте).
+> 2. **Foundry (anvil/cast)** — локальная установка бесплатна; нужна для fork-тестов и digital-twin (F2). Прошу разрешение.
+> 3. **Бюджет тестов:** real-money нет; Sepolia-краник 0.06 ETH/сутки — только критичные e2e.
+>
+> **Смета (соло+AI):** S5-04 EIP-1559 — 1 дн · S5-05 private RPC — 1 дн · S5-07 multi-chain (+Base) — 2–3 дн · S5-01 swap (агрегатор+slippage-guard) — 3–4 дн · S5-02 bridge — 2–3 дн · S5-06 ERC-4337 (session keys по готовой таблице; bundler/paymaster платные → локальный EntryPoint в тестах) — 4–6 дн · S5-03 deploy Sepolia — 1–2 дн (отдельная команда). **Итого ≈ 3–4 недели.**
+>
+> **Порядок по умолчанию:** S5-04 → S5-05 → S5-07 → S5-01 → S5-02 → S5-06 → S5-03.
+>
+> **Вопросы владельцу:** (1) RPC-канал для dev/e2e? (2) ставим Foundry локально? (3) 4337 — только локальный EntryPoint до отдельного решения? (4) деплой контрактов на Sepolia — когда и какие?
+
 - [ ] S5-01 Swap (1inch/агрегатор + slippage-guard) · S5-02 Bridge · S5-03 Deploy
 - [ ] S5-04 EIP-1559 + газ-оракул · S5-05 Private RPC (Flashbots-класс) + jitter
 - [ ] S5-06 ERC-4337: smart account + session keys (TTL, revoke) + paymaster + social recovery
