@@ -113,6 +113,9 @@
 - [x] S4-11 Policy Simulator: `runtime/policy_simulator.py` — прогон последних решений через текущую и кандидатную политики → изменения вердиктов (tightened/relaxed/unchanged) БЕЗ применения; API `POST /agents/{id}/policy/simulate` + кнопка «Симулировать» в панели правил (impact-превью до «Применить»). 4 теста.
 - [x] S4-12 Trust Ladder: `tiers.trust_ladder_rung()` (observe→suggest→simulate→approve→limited_auto→autonomous; консервативный маппинг tier+undo/approvals) → в `reports/summary.trust` + строка «Автономия» в UI. 2 теста. Коммит `5014142`.
 
+- [x] S4-13 Autonomy Drift Detection: `runtime/drift.py` — сравнение окон истории (средняя сумма, новые типы действий, рост high/critical-риска) → сигналы + drift_score/level (stable/watch/drift); API `GET /agents/{id}/drift` + строка «Дрейф» с сигналами в отчётах. 3 теста.
+- [x] S4-14 Decision Replay v1: `runtime/replay.py` — восстановление решения + вердикт **текущей** политики vs сохранённого (`verdict_changed`); API `GET /decisions/{id}` (ownership) + кнопка «Переиграть» в карточке решения. 2 теста. Коммит `30e7381`.
+
 ### P5 — Исполнение 2.0
 - [ ] S5-01 Swap (1inch/агрегатор + slippage-guard) · S5-02 Bridge · S5-03 Deploy
 - [ ] S5-04 EIP-1559 + газ-оракул · S5-05 Private RPC (Flashbots-класс) + jitter
