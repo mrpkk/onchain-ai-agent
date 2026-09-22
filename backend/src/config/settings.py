@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     signer_private_key: str = ""
 
     # Server
-    host: str = "0.0.0.0"
+    host: str = "127.0.0.1"  # deploy переопределяет (Dockerfile: --host 0.0.0.0)
     port: int = 8080
 
     # Auth — JWT

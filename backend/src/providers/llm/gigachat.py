@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import pathlib
 import time
 import uuid
 from typing import Optional
@@ -12,6 +14,18 @@ import httpx
 from .base import LLMProvider, LLMResult, ProviderError
 
 logger = logging.getLogger("providers.gigachat")
+
+_CA_BUNDLE = os.getenv("GIGACHAT_CA_BUNDLE") or str(
+    pathlib.Path(__file__).resolve().parents[2] / "security" / "certs" / "russian_trusted_root_ca.pem"
+)
+
+
+def _ssl_verify():
+    """Проверка TLS по российскому Trusted Root CA (НУЦ Минцифры)."""
+    if _CA_BUNDLE and pathlib.Path(_CA_BUNDLE).exists():
+        return _CA_BUNDLE
+    logger.warning("GigaChat: CA-бандл НУЦ не найден (%s) — fallback verify=False", _CA_BUNDLE)
+    return False
 
 OAUTH_URL = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
 BASE_URL = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
@@ -36,7 +50,7 @@ class GigaChatProvider(LLMProvider):
         if self._token and self._expires_at > now + 60:
             return self._token
         try:
-            async with httpx.AsyncClient(timeout=timeout, verify=False) as client:  # noqa: S501 — НУЦ Минцифры
+            async with httpx.AsyncClient(timeout=timeout, verify=_ssl_verify()) as client:
                 response = await client.post(
                     OAUTH_URL,
                     data={"scope": self.scope},
@@ -78,7 +92,7 @@ class GigaChatProvider(LLMProvider):
             ],
         }
         try:
-            async with httpx.AsyncClient(timeout=timeout, verify=False) as client:  # noqa: S501
+            async with httpx.AsyncClient(timeout=timeout, verify=_ssl_verify()) as client:
                 response = await client.post(
                     BASE_URL, json=payload,
                     headers={"Authorization": f"Bearer {token}",

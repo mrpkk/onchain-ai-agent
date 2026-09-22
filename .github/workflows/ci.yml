@@ -12,6 +12,14 @@ jobs:
       - run: pip install -r backend/requirements.txt pytest
       - name: Backend tests (security, dharma, auth, health)
         run: python3 -m pytest backend/tests -q
+      - name: SAST (bandit, medium+)
+        run: |
+          pip install -q bandit
+          bandit -r backend/src --severity-level medium
+      - name: Dependency audit (pip-audit)
+        run: |
+          pip install -q pip-audit
+          pip-audit -r backend/requirements.txt --progress-spinner off
       - name: Secret scan (private keys)
         run: "! grep -rnE '0x[a-f0-9]{64}' backend/src --include='*.py'"
       - name: Gitleaks (secrets scan)

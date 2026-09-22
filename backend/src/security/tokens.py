@@ -12,7 +12,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from jose import JWTError, jwt
+import jwt as pyjwt
+from jwt import PyJWTError
 
 ACCESS = "access"
 REFRESH = "refresh"
@@ -46,15 +47,15 @@ def create_token(sub: str, secret: str, algorithm: str = "HS256",
     }
     if token_type == REFRESH:
         payload["family_id"] = family_id or uuid.uuid4().hex
-    return jwt.encode(payload, secret, algorithm=algorithm)
+    return pyjwt.encode(payload, secret, algorithm=algorithm)
 
 
 def decode_token(token: str, secret: str, algorithm: str = "HS256",
                  expected_type: str = ACCESS) -> dict:
     """Декодирует и проверяет токен (подпись, срок, тип). Raises TokenError."""
     try:
-        payload = jwt.decode(token, secret, algorithms=[algorithm])
-    except JWTError as e:
+        payload = pyjwt.decode(token, secret, algorithms=[algorithm])
+    except PyJWTError as e:
         raise TokenError("TOKEN_INVALID", f"Invalid token: {e}") from e
     if payload.get("type") != expected_type:
         raise TokenError("TOKEN_WRONG_TYPE", f"Expected {expected_type} token")
