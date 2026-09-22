@@ -1,12 +1,13 @@
-node_modules/
-__pycache__/
-*.pyc
+
+.coverage
 .env
-
-# Internal freelance listings
+.env.migrated-*
 freelance/
-
 # Hardhat artifacts
+htmlcov/
+# Internal freelance listings
+node_modules/
+*.pyc
+__pycache__/
 smart-contracts/artifacts/
 smart-contracts/cache/
-.env.migrated-*
