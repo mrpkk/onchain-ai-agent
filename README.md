@@ -36,19 +36,21 @@
 - MCP-сервер наружу (read-tools) — Phase 6
 - RefreshStore пока in-memory (таблица `refresh_tokens` готова — миграция слоем позже)
 
-## 🔌 API (18 маршрутов + WebSocket; сверено с кодом)
+## 🔌 API (37 маршрутов + WebSocket; авто-перечень — `docs/API.md`)
 
 | Метод | Путь | Назначение |
 |---|---|---|
-| POST | `/api/v1/auth/register` | Регистрация (Argon2id) |
-| POST | `/api/v1/auth/token` | Логин → access+refresh (15м/7д) |
-| POST | `/api/v1/auth/refresh` | Ротация пары; reuse → отзыв семьи |
-| POST | `/api/v1/auth/revoke-all` · `/api/v1/auth/logout` | Отзыв всех сессий |
-| POST/GET | `/api/v1/agents` | Создать / список агентов |
+| POST | `/api/v1/auth/register` · `/token` · `/refresh` · `/revoke-all` · `/logout` | Argon2id, JWT-пара с ротацией и reuse-detection |
+| POST/GET | `/api/v1/agents` | Создать / список агентов (тиры 0–3, авто-политика тира) |
 | GET | `/api/v1/agents/{id}` | Карточка агента |
-| POST | `/api/v1/agents/{id}/start` · `/stop` | Запуск / пауза |
-| POST | `/api/v1/agents/{id}/goal` | Постановка цели |
-| POST | `/api/v1/agents/{id}/kill-switch` | Экстренная остановка |
+| POST | `/api/v1/agents/{id}/start` · `/stop` · `/heartbeat` | Жизненный цикл (+ dead-man switch) |
+| POST | `/api/v1/agents/{id}/goal` · `/intent` · `/intent/confirm` | Цель; чат-задача NL→intent с Dharma-превью |
+| GET/PUT | `/api/v1/agents/{id}/policy` · POST `/policy/from-text` · `/policy/simulate` | Версии Dharma-политики; правила словами; impact-симулятор |
+| GET | `/api/v1/agents/{id}/decisions` · `/pending` · `/audit` · `/drift` | Decision Diary; undo-очередь; Sakshi; дрейф |
+| GET | `/api/v1/agents/{id}/reports/summary` · `/export.csv` | Health/Trust/дрейф-сводка; CSV (decisions/transactions/audit) |
+| GET/POST | `/api/v1/approvals` · `/approvals/{id}/approve|reject` · `/pending/{id}/cancel` | Approvals-inbox (web=Telegram, единый путь) |
+| GET/POST/PUT | `/api/v1/decisions/{id}` | Replay: текущий вердикт vs сохранённый |
+| POST | `/api/v1/agents/{id}/kill-switch` | Экстренная остановка (soft/hard, терминальная) |
 | GET | `/api/v1/agents/{id}/transactions` | История транзакций |
 | GET | `/api/v1/health` · `/health` · `/health/deep` | Честные проверки компонентов |
 | WS | `/ws?token=<access>` | Live-события |
@@ -89,23 +91,26 @@ DEBUG=true .venv/bin/uvicorn src.api.main:app --port 8000   # из backend/
 ## 🧪 Тесты
 
 ```bash
-# Backend: 116 тестов (security, dharma, JWT, health, persistence, sakshi, ws, llm-router, mempool)
-backend/.venv/bin/python -m pytest backend/tests -q
+# Backend: 221 тест + coverage-гейт 80%
+backend/.venv/bin/python -m pytest backend/tests -q --cov=src --cov-fail-under=80
 
 # Контракты: 56 тестов (hardhat)
 cd smart-contracts && npx hardhat test
+
+# Live E2E-смоук (13 проверок) против запущенного сервера:
+python3 scripts/e2e_live.py     # KARTA_E2E_BASE/USER/PASS — при необходимости
 ```
 
 ## 🏗 Архитектура (кратко)
 
 ```
-Human → REST /api/v1 + WS /ws → [Dharma Engine] → [Risk] → [Simulator*] → [Approval*] → [Karma Engine*] → Chain
-                                        ↓                                                  ↓
+Human → REST /api/v1 + WS /ws → [Dharma Engine] → [Simulation] → [Timelock/Approval] → [Karma Engine] → Chain*
+                                        ↓                                                ↓
                                   Sakshi Log (HMAC, append-only)  ←  Decision Diary (decisions)
-* Phase 3/5 — в разработке; сейчас: simulation-mode + policy-гейт + kill-switch
+* Реальное исполнение on-chain — Phase 5 (STOP-GATE); сейчас: тиры 0–1 simulation-mode, тиры 2–3 за гейтами
 ```
 
-**Инварианты:** LLM не получает ключ; tx не подписывается без policy-вердикта и симуляции (Phase 3);
+**Инварианты:** LLM не получает ключ; tx не подписывается без policy-вердикта и симуляции;
 любая ошибка → hold + ask_human; ни один слой не контролирует pipeline единолично.
 
 ## 📚 Документы
@@ -113,7 +118,9 @@ Human → REST /api/v1 + WS /ws → [Dharma Engine] → [Risk] → [Simulator*] 
 - `PROGRESS.md` — мега-контекст, реестр слайсов, журнал
 - `docs/AUDIT_REPORT.md` — actual-vs-claimed аудит
 - `docs/THREAT_MODEL.md` — STRIDE T1–T12
-- `docs/ARCHITECTURE_CURRENT.md` — фактическая архитектура
+- `docs/ARCHITECTURE_CURRENT.md` — фактическая архитектура (до модернизации)
+- `docs/ARCHITECTURE.md` · `docs/SECURITY.md` — as-built архитектура и security-posture
+- `docs/API.md` — перечень API (генератор `docs/generate_api_md.py`)
 - `smart-contracts/` — Solidity 0.8.20 + Hardhat
 
 ---
