@@ -119,6 +119,16 @@ from contextlib import asynccontextmanager as _asynccontextmanager
 @_asynccontextmanager
 async def _lifespan(_app: FastAPI):
     await create_all()  # dev-convenience; в прод-контуре схема ведётся Alembic
+    try:
+        from ..runtime.reconciliation import reconcile_on_startup
+
+        fixed = await reconcile_on_startup()
+        if fixed:
+            logging.getLogger("uvicorn.error").warning(
+                "Реконсиляция при старте: %d агент(ов) running→stopped", fixed
+            )
+    except Exception as e:  # noqa: BLE001 — не роняем старт из-за реконсиляции
+        logging.getLogger("uvicorn.error").warning("Реконсиляция не выполнена: %s", e)
     telegram_task = None
     stop_event = asyncio.Event()
     try:
