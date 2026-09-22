@@ -94,3 +94,17 @@ class KeyVault:
         """Безопасное представление ключа для логов: 0x1234…abcd."""
         tail = re.sub(r"[^0-9a-fA-F]", "", key)[-4:] or "****"
         return f"***…{tail}"
+
+
+def migrate_env_key_to_vault(vault: KeyVault, env_var: str = "AGENT_WALLET_PRIVATE_KEY",
+                             name: str = "agent_wallet") -> bool:
+    """Переносит ключ из окружения в KeyVault (переменную окружения не удаляет).
+
+    Returns:
+        True, если переменная найдена и ключ сохранён; False — если пуста.
+    """
+    key = os.environ.get(env_var, "").strip()
+    if not key:
+        return False
+    vault.put_key(name, key)
+    return True

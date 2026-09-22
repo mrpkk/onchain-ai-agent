@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="g2" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5B8DEF"/>
+      <stop offset="1" stop-color="#7C3AED"/>
+    </linearGradient>
+  </defs>
+  <!-- Концепт 2: Монограмма K из узлов-блоков (интент → действие) -->
+  <g stroke="url(#g2)" stroke-width="28" stroke-linecap="round">
+    <path d="M96 96 L96 416"/>
+    <path d="M96 256 L272 96"/>
+    <path d="M128 256 L272 416"/>
+  </g>
+  <g fill="url(#g2)">
+    <rect x="56" y="56" width="80" height="80" rx="22"/>
+    <rect x="56" y="376" width="80" height="80" rx="22"/>
+    <rect x="376" y="56" width="80" height="80" rx="22"/>
+    <rect x="376" y="376" width="80" height="80" rx="22"/>
+  </g>
+  <circle cx="256" cy="256" r="22" fill="url(#g2)"/>
+</svg>

@@ -1,0 +1,9 @@
+{
+  "name": "KARTA — Trusted On-Chain Agent",
+  "short_name": "KARTA",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0A0E17",
+  "theme_color": "#0A0E17",
+  "description": "Trust layer между AI и ончейн-действием"
+}

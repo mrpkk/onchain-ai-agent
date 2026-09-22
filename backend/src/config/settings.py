@@ -8,6 +8,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",  # мастер-~/.env содержит сотни чужих ключей — не падать
     )
 
     # Application
@@ -21,16 +22,17 @@ class Settings(BaseSettings):
     signer_private_key: str = ""
 
     # Server
-    host: str = "0.0.0.0"
+    host: str = "127.0.0.1"  # deploy переопределяет (Dockerfile: --host 0.0.0.0)
     port: int = 8080
 
     # Auth — JWT
     jwt_secret_key: str = "CHANGE-ME-in-production-use-openssl-rand-hex-32"
     jwt_algorithm: str = "HS256"
-    jwt_access_token_expire_minutes: int = 60
+    jwt_access_token_expire_minutes: int = 15
+    jwt_refresh_token_expire_days: int = 7
 
-    # Database (PostgreSQL async)
-    database_url: str = "postgresql+asyncpg://agent:agent@localhost:5432/onchain_ai"
+    # Database (PostgreSQL async; локальный docker PG — порт 5433)
+    database_url: str = "postgresql+asyncpg://agent:agent@127.0.0.1:5433/onchain_ai"
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"

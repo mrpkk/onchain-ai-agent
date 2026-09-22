@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KARTA — выбор логотипа</title>
+<style>
+  :root {
+    --bg: #0A0E17; --surface: #12161F; --border: #21262D;
+    --text: #E6EAF2; --muted: #8B93A7; --accent: #5B8DEF; --accent2: #7C3AED;
+  }
+  [data-theme="light"] { --bg:#F7F8FB; --surface:#fff; --border:#DCE0E9; --text:#1A1F2E; --muted:#5A6376; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background: var(--bg); color: var(--text); font-family: Inter, Manrope, system-ui, sans-serif; padding: 40px; }
+  h1 { font-size: 1.6rem; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px; }
+  .sub { color: var(--muted); margin-bottom: 28px; }
+  .themes { margin-bottom: 24px; }
+  .themes button { background: var(--surface); color: var(--text); border: 1px solid var(--border); padding: 8px 16px; border-radius: 8px; cursor: pointer; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; }
+  .card h2 { font-size: 1rem; margin-bottom: 4px; }
+  .card .desc { color: var(--muted); font-size: .8rem; margin-bottom: 16px; }
+  .sizes { display: flex; align-items: flex-end; gap: 18px; margin: 16px 0; flex-wrap: wrap; }
+  .sizes .item { text-align: center; color: var(--muted); font-size: .65rem; }
+  .sizes img { display: block; margin: 0 auto 6px; }
+  .on-light { background: #F7F8FB; border-radius: 12px; padding: 16px; display: flex; gap: 18px; align-items: flex-end; }
+  .footer { margin-top: 28px; color: var(--muted); font-size: .85rem; }
+  code { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 2px 6px; font-size: .8rem; }
+</style>
+</head>
+<body>
+  <h1>KARTA — выбор логотипа</h1>
+  <div class="sub">Три концепта · проверка размеров (16→128px) · светлый/тёмный фон. Выбери и скажи: «лого — чакра / K / щит».</div>
+  <div class="themes">
+    <button onclick="document.documentElement.toggleAttribute('data-theme'); if(!document.documentElement.hasAttribute('data-theme')) document.documentElement.setAttribute('data-theme','light'); else document.documentElement.removeAttribute('data-theme');">Переключить тему</button>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Чакра-колесо</h2>
+      <div class="desc">Кольцо из звеньев цепи — мандала + блокчейн. Символ цикла и доверия.</div>
+      <div class="sizes">
+        <div class="item"><img src="karta-chakra.svg" width="128" height="128" alt="chakra 128"><span>128</span></div>
+        <div class="item"><img src="karta-chakra.svg" width="64" height="64" alt="chakra 64"><span>64</span></div>
+        <div class="item"><img src="karta-chakra.svg" width="32" height="32" alt="chakra 32"><span>32</span></div>
+        <div class="item"><img src="karta-chakra.svg" width="16" height="16" alt="chakra 16"><span>16</span></div>
+      </div>
+      <div class="on-light">
+        <img src="karta-chakra.svg" width="48" alt="chakra на светлом">
+        <img src="karta-chakra.svg" width="24" alt="chakra на светлом 24">
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Монограмма K</h2>
+      <div class="desc">Буква K из узлов-блоков: интент → действие. Прямая связь с именем.</div>
+      <div class="sizes">
+        <div class="item"><img src="karta-monogram.svg" width="128" height="128" alt="K 128"><span>128</span></div>
+        <div class="item"><img src="karta-monogram.svg" width="64" height="64" alt="K 64"><span>64</span></div>
+        <div class="item"><img src="karta-monogram.svg" width="32" height="32" alt="K 32"><span>32</span></div>
+        <div class="item"><img src="karta-monogram.svg" width="16" height="16" alt="K 16"><span>16</span></div>
+      </div>
+      <div class="on-light">
+        <img src="karta-monogram.svg" width="48" alt="K на светлом">
+        <img src="karta-monogram.svg" width="24" alt="K на светлом 24">
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Щит доверия</h2>
+      <div class="desc">Щит + звено цепи: security-first, «твой агент под защитой».</div>
+      <div class="sizes">
+        <div class="item"><img src="karta-shield.svg" width="128" height="128" alt="shield 128"><span>128</span></div>
+        <div class="item"><img src="karta-shield.svg" width="64" height="64" alt="shield 64"><span>64</span></div>
+        <div class="item"><img src="karta-shield.svg" width="32" height="32" alt="shield 32"><span>32</span></div>
+        <div class="item"><img src="karta-shield.svg" width="16" height="16" alt="shield 16"><span>16</span></div>
+      </div>
+      <div class="on-light">
+        <img src="karta-shield.svg" width="48" alt="щит на светлом">
+        <img src="karta-shield.svg" width="24" alt="щит на светлом 24">
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Файлы: <code>branding/karta-chakra.svg</code> · <code>branding/karta-monogram.svg</code> · <code>branding/karta-shield.svg</code><br>
+    После выбора: <code>bash branding/generate_assets.sh branding/&lt;выбранный&gt;.svg</code> — фавиконы 16–512, apple-touch-icon, OG-картинка.
+  </div>
+</body>
+</html>

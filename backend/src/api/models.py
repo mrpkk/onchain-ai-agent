@@ -33,7 +33,13 @@ class TokenRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
+    refresh_token: str = ""
     token_type: str = "bearer"
+    expires_in: int = 900
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
 
 
 class UserCreate(BaseModel):
@@ -55,6 +61,7 @@ class AgentCreate(BaseModel):
     chain_id: int = 1
     wallet_address: Optional[str] = None
     config: dict = Field(default_factory=dict)
+    tier: int = Field(default=0, ge=0, le=3)  # S4-04: 0 demo → 3 full
 
 
 class AgentUpdate(BaseModel):
@@ -69,6 +76,7 @@ class AgentResponse(BaseModel):
     name: str
     description: str
     strategy: str
+    tier: int = 0
     status: AgentStatus
     chain_id: int
     wallet_address: Optional[str] = None
@@ -90,6 +98,10 @@ class GoalRequest(BaseModel):
 
 class KillSwitchRequest(BaseModel):
     reason: str = "manual shutdown"
+
+
+class TierRequest(BaseModel):
+    tier: int = Field(..., ge=0, le=3)
 
 
 # ── Transactions ───────────────────────────────────────────────────────
@@ -121,5 +133,151 @@ class HealthResponse(BaseModel):
     version: str
     uptime: float
     agents_active: int
-    blockchain_connected: bool
-    redis_connected: bool
+    components: dict
+
+
+# ── Policy (S3-01) ─────────────────────────────────────────────────────
+
+class PolicyPutRequest(BaseModel):
+    dsl_yaml: str = Field(..., min_length=1, max_length=20000)
+
+
+class PolicyValidateRequest(BaseModel):
+    dsl_yaml: str = Field(..., min_length=1, max_length=20000)
+
+
+class PolicyResponse(BaseModel):
+    agent_id: str
+    version: int
+    dsl_yaml: str
+    active: bool
+    compiled: dict = Field(default_factory=dict)
+
+
+class PolicyValidateResponse(BaseModel):
+    valid: bool
+    errors: list[str] = Field(default_factory=list)
+    window: Optional[list[int]] = None
+
+
+# ── Runtime / Diary / Audit (S3-06) ────────────────────────────────────
+
+class DecisionResponse(BaseModel):
+    id: str
+    action: str
+    reasoning: Optional[str] = None
+    confidence: Optional[float] = None
+    risk_level: Optional[str] = None
+    policy_verdict: Optional[dict] = None
+    requires_approval: bool = False
+    status: str = "proposed"
+    created_at: datetime
+
+
+class DecisionListResponse(BaseModel):
+    decisions: list[DecisionResponse]
+    total: int
+
+
+class AuditEventResponse(BaseModel):
+    id: int
+    actor: str
+    event_type: str
+    payload: dict = Field(default_factory=dict)
+    prev_hash: Optional[str] = None
+    hash: Optional[str] = None
+    created_at: datetime
+
+
+class AuditListResponse(BaseModel):
+    events: list[AuditEventResponse]
+    total: int
+
+
+class PendingListResponse(BaseModel):
+    pending: list[dict]
+    total: int
+
+
+# ── Chat / Intent (S4-03) ─────────────────────────────────────────────
+
+class IntentRequest(BaseModel):
+    text: str = Field(..., min_length=3, max_length=2000)
+
+
+class IntentPreviewResponse(BaseModel):
+    ok: bool
+    intent: Optional[dict] = None
+    policy_verdict: Optional[dict] = None
+    warnings: list[str] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class IntentConfirmRequest(BaseModel):
+    action: str = Field(..., min_length=1, max_length=32)
+    params: dict = Field(default_factory=dict)
+
+
+class IntentConfirmResponse(BaseModel):
+    status: str
+    tx_hash: Optional[str] = None
+    error: Optional[str] = None
+    detail: dict = Field(default_factory=dict)
+
+
+# ── Approvals (S4-06) ─────────────────────────────────────────────────
+
+class ApprovalResponse(BaseModel):
+    id: str
+    decision_id: Optional[str] = None
+    agent_id: Optional[str] = None
+    agent_name: Optional[str] = None
+    action: Optional[str] = None
+    params: dict = Field(default_factory=dict)
+    reasoning: Optional[str] = None
+    status: str = "pending"
+    channel: str = "web"
+    ttl_until: Optional[datetime] = None
+    created_at: datetime
+
+
+class ApprovalListResponse(BaseModel):
+    approvals: list[ApprovalResponse]
+    total: int
+
+
+# ── Policy from text (S4-10 Intent→Guarantee) ─────────────────────────
+
+class PolicyFromTextResponse(BaseModel):
+    ok: bool
+    summary: str = ""
+    confidence: float = 0.0
+    patch: dict = Field(default_factory=dict)
+    dsl_yaml: Optional[str] = None
+    needs_clarification: bool = False
+    questions: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+# ── Policy simulator (S4-10/P7) ───────────────────────────────────────
+
+class PolicySimulateRequest(BaseModel):
+    dsl_yaml: str = Field(..., min_length=1, max_length=20000)
+
+
+class PolicySimulateResponse(BaseModel):
+    decisions_analyzed: int
+    changes: list[dict] = Field(default_factory=list)
+    summary: dict = Field(default_factory=dict)
+    applied: bool = False
+    note: str = ""
+
+
+# ── Drift / Replay (S4-13/S4-14) ──────────────────────────────────────
+
+class DecisionReplayResponse(BaseModel):
+    decision: dict = Field(default_factory=dict)
+    then: Optional[dict] = None
+    now: dict = Field(default_factory=dict)
+    verdict_changed: bool = False
+    note: str = ""

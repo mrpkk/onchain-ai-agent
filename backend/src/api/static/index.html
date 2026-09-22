@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0A0E17">
+<title>KARTA — Cockpit</title>
+<link rel="manifest" href="/static/manifest.webmanifest">
+<link rel="stylesheet" href="/static/tokens.css">
+<link rel="stylesheet" href="/static/dashboard.css">
+</head>
+<body>
+
+<!-- ═══ Auth ═══ -->
+<div id="auth-screen">
+  <div class="auth-box">
+    <h1>KARTA</h1>
+    <p class="sub" data-i18n="auth.sub">Trust layer: агент предлагает — политика разрешает</p>
+    <div class="auth-tabs">
+      <div class="auth-tab active" onclick="switchAuth('login')" data-i18n="auth.login_tab">Вход</div>
+      <div class="auth-tab" onclick="switchAuth('register')" data-i18n="auth.register_tab">Регистрация</div>
+    </div>
+    <div id="login-form" class="auth-form active">
+      <input id="login-username" placeholder="Имя пользователя" autocomplete="username" data-i18n-placeholder="auth.username_ph">
+      <input id="login-password" type="password" placeholder="Пароль" autocomplete="current-password" data-i18n-placeholder="auth.password_ph">
+      <div class="auth-error" id="login-error"></div>
+      <button class="btn primary wide" onclick="doLogin()" data-i18n="auth.login_btn">Войти</button>
+    </div>
+    <div id="register-form" class="auth-form">
+      <input id="reg-username" placeholder="Имя пользователя" autocomplete="username" data-i18n-placeholder="auth.username_ph">
+      <input id="reg-password" type="password" placeholder="Пароль (мин. 8 символов)" autocomplete="new-password" data-i18n-placeholder="auth.password_new_ph">
+      <div class="auth-error" id="reg-error"></div>
+      <button class="btn primary wide" onclick="doRegister()" data-i18n="auth.register_btn">Создать аккаунт</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Cockpit ═══ -->
+<div id="dash-screen">
+  <header class="topbar">
+    <div class="brand"><span class="brand-dot"></span><span>KARTA</span></div>
+    <div class="topbar-right">
+      <span class="badge" id="ws-status" data-state="offline">WS OFFLINE</span>
+      <button class="btn ghost small" onclick="startOnboarding()" data-i18n="topbar.master">Мастер</button>
+      <span class="muted" id="dash-username"></span>
+      <a class="link" href="/docs" target="_blank" rel="noopener">API</a>
+      <button class="btn ghost small" id="lang-btn" onclick="toggleLang()">EN</button>
+      <button class="btn ghost" onclick="doLogout()" data-i18n="topbar.logout">Выйти</button>
+    </div>
+  </header>
+
+  <main class="cockpit">
+    <section class="panel full">
+      <div class="panel-head"><h3 data-i18n="panel.chat">Чат-задача</h3><span class="muted" data-i18n="panel.chat.sub">NL → превью → подтверждение</span></div>
+      <div class="chat-row">
+        <input id="chat-input" placeholder="Переведи 0.01 ETH на 0x…, когда газ < 20 gwei" data-i18n-placeholder="chat.input_ph">
+        <button class="btn primary" onclick="parseChat()" data-i18n="btn.parse">Разобрать</button>
+      </div>
+      <div id="chat-preview" class="chat-preview"></div>
+      <div id="chat-result" class="chat-result"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h3 data-i18n="panel.agents">Мои агенты</h3>
+        <button class="btn primary small" onclick="showCreateModal()" data-i18n="btn.agent_add">+ Агент</button>
+      </div>
+      <div id="agent-list" class="agent-list">
+        <div class="empty">Загрузка…</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h3 data-i18n="panel.status">Статус</h3><span class="muted" id="status-agent-name">—</span></div>
+      <div id="status-card" class="status-card">
+        <div class="empty">Выберите агента</div>
+      </div>
+      <div class="panel-head"><h3 data-i18n="panel.pending">Очередь undo</h3><span class="muted" id="pending-count">0</span></div>
+      <div id="pending-list" class="pending-list">
+        <div class="empty">Нет отложенных действий</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h3 data-i18n="panel.approvals">Подтверждения</h3><span class="muted" id="approvals-count">0</span></div>
+      <div id="approvals-list" class="pending-list">
+        <div class="empty">—</div>
+      </div>
+    </section>
+
+    <section class="panel wide">
+      <div class="panel-head">
+        <h3 data-i18n="panel.feed">Лента решений</h3>
+        <button class="btn ghost small" onclick="refreshFeed()" data-i18n="btn.refresh">Обновить</button>
+      </div>
+      <div id="decisions-feed" class="feed">
+        <div class="empty">Выберите агента</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h3 data-i18n="panel.audit">Sakshi Log</h3><span class="muted" id="audit-count">0</span></div>
+      <div id="audit-list" class="audit">
+        <div class="empty">—</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h3 data-i18n="panel.policy">Правила (Dharma)</h3></div>
+      <div class="muted" style="margin-bottom:8px;font-size:.74rem" data-i18n="policy.hint">Правило словами → патч политики (применение — отдельным подтверждением)</div>
+      <div class="chat-row">
+        <input id="policy-input" placeholder="Не трать больше 0.05 ETH в день" data-i18n-placeholder="policy.text_ph">
+        <button class="btn primary small" onclick="parsePolicyRule()" data-i18n="policy.parse">Разобрать</button>
+      </div>
+      <div id="policy-preview" class="chat-preview"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h3 data-i18n="panel.reports">Отчёты</h3><button class="btn ghost small" onclick="refreshReport()" data-i18n="btn.refresh">Обновить</button></div>
+      <div id="report-summary" class="status-card"><div class="empty">—</div></div>
+      <div class="intent-actions" style="margin-top:10px">
+        <button class="btn small ghost" onclick="downloadCsv('decisions')" data-i18n="btn.csv_decisions">CSV решения</button>
+        <button class="btn small ghost" onclick="downloadCsv('transactions')" data-i18n="btn.csv_transactions">CSV транзакции</button>
+        <button class="btn small ghost" onclick="downloadCsv('audit')" data-i18n="btn.csv_audit">CSV аудит</button>
+      </div>
+    </section>
+  </main>
+
+  <div class="tx-panel" id="tx-panel">
+    <div class="tx-header">
+      <h3 data-i18n="panel.tx">Транзакции</h3>
+      <button class="icon-btn" onclick="hideTxPanel()">✕</button>
+    </div>
+    <div class="tx-list" id="tx-list"><div class="empty">—</div></div>
+  </div>
+</div>
+
+<!-- ═══ Onboarding (S4-04) ═══ -->
+<div class="modal-overlay" id="onboarding-modal">
+  <div class="modal wide-modal">
+    <h3 data-i18n="onb.title">Настройка агента за 3 шага</h3>
+    <div id="onb-step-1">
+      <p class="muted" data-i18n="onb.step1">Режим работы</p>
+      <div class="onb-cards">
+        <div class="onb-card selected" data-tier="0" onclick="onbPickTier(0)"><b>Demo</b><span>Виртуальные средства — безопасно</span></div>
+        <div class="onb-card" data-tier="1" onclick="onbPickTier(1)"><b>Simulated</b><span>Реальные данные, без исполнения</span></div>
+        <div class="onb-card disabled"><b>Live</b><span>Phase 5 · STOP-GATE</span></div>
+      </div>
+      <div class="modal-btns">
+        <button class="btn ghost" onclick="closeOnboarding()" data-i18n="onb.later">Позже</button>
+        <button class="btn primary" onclick="onbStep(2)">Далее</button>
+      </div>
+    </div>
+    <div id="onb-step-2" style="display:none">
+      <p class="muted" data-i18n="onb.step2">Шаблон задачи</p>
+      <div class="onb-cards">
+        <div class="onb-card" data-tpl="gas" onclick="onbPickTemplate('gas')"><b>Газ-монитор</b><span>Следить за газом</span></div>
+        <div class="onb-card" data-tpl="balance" onclick="onbPickTemplate('balance')"><b>Баланс-страж</b><span>Следить за балансом</span></div>
+        <div class="onb-card" data-tpl="custom" onclick="onbPickTemplate('custom')"><b>Своя цель</b><span>Сформулирую сам</span></div>
+      </div>
+      <textarea id="onb-goal" placeholder="Цель агента…" style="margin-top:10px"></textarea>
+      <div class="modal-btns">
+        <button class="btn ghost" onclick="onbStep(1)">Назад</button>
+        <button class="btn primary" onclick="onbStep(3)">Далее</button>
+      </div>
+    </div>
+    <div id="onb-step-3" style="display:none">
+      <p class="muted" data-i18n="onb.step3">Лимиты тира</p>
+      <div class="intent-card"><div class="params" id="onb-limits-body">—</div></div>
+      <div class="modal-btns">
+        <button class="btn ghost" onclick="onbStep(2)">Назад</button>
+        <button class="btn primary" onclick="onbFinish()" data-i18n="onb.launch">Запустить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Modals ═══ -->
+<div class="modal-overlay" id="create-modal">
+  <div class="modal">
+    <h3 data-i18n="modal.create.title">Новый агент</h3>
+    <label data-i18n="modal.create.name">Имя</label>
+    <input id="new-name" placeholder="MarketWatcher">
+    <label data-i18n="modal.create.desc">Описание</label>
+    <textarea id="new-desc" placeholder="Мониторинг и алерты…"></textarea>
+    <label data-i18n="modal.create.strategy">Стратегия</label>
+    <select id="new-strategy">
+      <option value="default">Default</option>
+      <option value="monitoring">Monitoring</option>
+      <option value="yield-farming">Yield Farming</option>
+      <option value="arbitrage">Arbitrage</option>
+    </select>
+    <label data-i18n="modal.create.network">Сеть</label>
+    <select id="new-chain">
+      <option value="11155111">Sepolia (тест)</option>
+      <option value="1">Ethereum</option>
+      <option value="137">Polygon</option>
+      <option value="56">BSC</option>
+    </select>
+    <div class="modal-btns">
+      <button class="btn ghost" onclick="hideCreateModal()" data-i18n="btn.cancel">Отмена</button>
+      <button class="btn primary" onclick="createAgent()" data-i18n="modal.create.submit">Создать</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="goal-modal">
+  <div class="modal">
+    <h3 data-i18n="modal.goal.title">Цель агента</h3>
+    <label data-i18n="modal.goal.label">Цель</label>
+    <textarea id="goal-text" placeholder="Следи за газом и сообщай, когда < 20 gwei"></textarea>
+    <div class="modal-btns">
+      <button class="btn ghost" onclick="hideGoalModal()" data-i18n="btn.cancel">Отмена</button>
+      <button class="btn primary" onclick="setGoal()" data-i18n="btn.goal">Поставить</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="/static/i18n.js"></script>
+<script src="/static/dashboard.js"></script>
+</body>
+</html>

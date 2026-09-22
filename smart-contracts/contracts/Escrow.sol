@@ -92,9 +92,8 @@ contract Escrow {
             arbiter: owner
         });
 
-        // Pull tokens from payer into this contract
-        bool ok = token_.safeTransferFrom(msg.sender, address(this), amount_);
-        if (!ok) revert TransferFailed();
+        // Pull tokens from payer into this contract (SafeERC20 reverts on failure)
+        token_.safeTransferFrom(msg.sender, address(this), amount_);
 
         emit EscrowCreated(escrowId, msg.sender, payee_, amount_, address(token_));
     }
@@ -108,8 +107,7 @@ contract Escrow {
         if (msg.sender != e.payer && msg.sender != e.arbiter) revert NotPayerOrArbiter();
 
         e.released = true;
-        bool ok = e.token.safeTransfer(e.payee, e.amount);
-        if (!ok) revert TransferFailed();
+        e.token.safeTransfer(e.payee, e.amount);
 
         emit EscrowReleased(escrowId, e.payee, e.amount);
     }
@@ -125,8 +123,7 @@ contract Escrow {
         if (msg.sender != e.payer) revert NotPayer();
 
         e.refunded = true;
-        bool ok = e.token.safeTransfer(e.payer, e.amount);
-        if (!ok) revert TransferFailed();
+        e.token.safeTransfer(e.payer, e.amount);
 
         emit EscrowRefunded(escrowId, e.payer, e.amount);
     }
@@ -158,13 +155,11 @@ contract Escrow {
 
         if (releaseToPayee) {
             e.released = true;
-            bool ok = e.token.safeTransfer(e.payee, e.amount);
-            if (!ok) revert TransferFailed();
+            e.token.safeTransfer(e.payee, e.amount);
             emit EscrowReleased(escrowId, e.payee, e.amount);
         } else {
             e.refunded = true;
-            bool ok = e.token.safeTransfer(e.payer, e.amount);
-            if (!ok) revert TransferFailed();
+            e.token.safeTransfer(e.payer, e.amount);
             emit EscrowRefunded(escrowId, e.payer, e.amount);
         }
     }

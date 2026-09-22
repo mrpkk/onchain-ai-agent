@@ -234,12 +234,23 @@ class PriceOracle:
 
 
 class MempoolMonitor:
-    """Monitors pending transactions in the mempool."""
+    """Реальный монитор блоков: фильтрация tx по watch-адресам + газ-тренд.
 
-    def __init__(self, blockchain: BlockchainPerception):
+    Честность (SPEC S2-07): при недоступном RPC scan_once возвращает
+    ``{"ok": False, "reason": "rpc_unavailable"}`` — никаких выдуманных tx.
+    """
+
+    def __init__(self, blockchain: "BlockchainPerception", history: int = 20):
         self.blockchain = blockchain
         self._watched_addresses: set[str] = set()
+        self._gas_history: list[tuple[int, float]] = []  # (block, gwei)
+        self._recent: list[MempoolTx] = []
+        self._history_limit = history
         self._running = False
+        self._last_block: Optional[int] = None
+        self.blocks_scanned = 0
+
+    # ── watch-список ────────────────────────────────────────────────
 
     def watch(self, address: str):
         self._watched_addresses.add(Web3.to_checksum_address(address))
@@ -247,29 +258,109 @@ class MempoolMonitor:
     def unwatch(self, address: str):
         self._watched_addresses.discard(Web3.to_checksum_address(address))
 
-    async def start_monitoring(self, chain: str = "ethereum", interval: int = 12):
-        self._running = True
+    # ── газ-тренд ───────────────────────────────────────────────────
+
+    def gas_trend(self) -> str:
+        """up | down | flat | unknown — по истории baseFee (треть к трети)."""
+        if len(self._gas_history) < 3:
+            return "unknown"
+        values = [gwei for _, gwei in self._gas_history]
+        third = max(1, len(values) // 3)
+        first_avg = sum(values[:third]) / third
+        last_avg = sum(values[-third:]) / third
+        if first_avg == 0:
+            return "unknown"
+        change = (last_avg - first_avg) / first_avg
+        if change > 0.10:
+            return "up"
+        if change < -0.10:
+            return "down"
+        return "flat"
+
+    def status(self) -> dict:
+        return {
+            "implemented": True,
+            "running": self._running,
+            "watched_addresses": len(self._watched_addresses),
+            "blocks_scanned": self.blocks_scanned,
+            "gas_trend": self.gas_trend(),
+            "recent_matched": len(self._recent),
+            "last_block": self._last_block,
+        }
+
+    # ── сканирование ────────────────────────────────────────────────
+
+    def _block_gas_gwei(self, w3: Web3, block: dict) -> float:
+        base_fee = block.get("baseFeePerGas")
+        if base_fee is None:
+            try:
+                base_fee = w3.eth.gas_price
+            except Exception:
+                return 0.0
+        return float(Web3.from_wei(int(base_fee), "gwei"))
+
+    def _match_tx(self, tx: dict, block_number: int, gas_gwei: float) -> Optional[MempoolTx]:
+        sender = (tx.get("from") or "").lower()
+        receiver = (tx.get("to") or "").lower()
+        watched = {addr.lower() for addr in self._watched_addresses}
+        if sender not in watched and receiver not in watched:
+            return None
+        return MempoolTx(
+            hash=tx.get("hash", "").hex() if hasattr(tx.get("hash", ""), "hex") else str(tx.get("hash", "")),
+            from_address=tx.get("from", "") or "",
+            to_address=tx.get("to", "") or "",
+            value=float(Web3.from_wei(int(tx.get("value", 0) or 0), "ether")),
+            gas_price=gas_gwei,
+            data=(tx.get("input", "") or "")[:68] if isinstance(tx.get("input", ""), str) else "",
+            timestamp=datetime.now(timezone.utc),
+        )
+
+    async def scan_once(self, chain: str = "ethereum") -> dict:
+        """Один проход по новым блокам. Честный отказ при недоступном RPC."""
         w3 = self.blockchain.get_web3(chain)
         if not w3:
-            return
+            return {"ok": False, "reason": "rpc_unavailable", "found": [], "scanned_blocks": 0}
 
-        last_block = w3.eth.block_number
-        logger.info(f"Starting mempool monitor on {chain} from block {last_block}")
+        try:
+            current_block = int(w3.eth.block_number)
+        except Exception as e:
+            return {"ok": False, "reason": f"rpc_error: {type(e).__name__}", "found": [],
+                    "scanned_blocks": 0}
 
-        while self._running:
+        if self._last_block is None:
+            # первый проход: обрабатываем текущий блок (fresh-старт)
+            self._last_block = max(current_block - 1, 0)
+        found: list[MempoolTx] = []
+        scanned = 0
+        for block_number in range(self._last_block + 1, current_block + 1):
             try:
-                current_block = w3.eth.block_number
-                if current_block > last_block:
-                    for tx_num in range(w3.eth.get_block(current_block).get("transactions", []) and
-                                        len(w3.eth.get_block(current_block, full_transactions=True).get("transactions", []))):
-                        pass
-                    last_block = current_block
-                await asyncio.sleep(interval)
-            except asyncio.CancelledError:
-                break
+                block = w3.eth.get_block(block_number, full_transactions=True)
             except Exception as e:
-                logger.error(f"Mempool monitor error: {e}")
-                await asyncio.sleep(interval)
+                logger.warning("Mempool: блок %s не прочитан: %s", block_number, e)
+                break
+            gas_gwei = self._block_gas_gwei(w3, block)
+            self._gas_history.append((block_number, gas_gwei))
+            self._gas_history = self._gas_history[-self._history_limit:]
+            for tx in block.get("transactions", []):
+                matched = self._match_tx(tx, block_number, gas_gwei)
+                if matched is not None:
+                    found.append(matched)
+                    self._recent.append(matched)
+            scanned += 1
+
+        self._recent = self._recent[-self._history_limit:]
+        self._last_block = current_block
+        self.blocks_scanned += scanned
+        return {"ok": True, "reason": None, "scanned_blocks": scanned,
+                "found": [tx.__dict__ for tx in found]}
+
+    async def start_monitoring(self, chain: str = "ethereum", interval: int = 12):
+        self._running = True
+        while self._running:
+            result = await self.scan_once(chain)
+            if not result["ok"] and result["reason"] == "rpc_unavailable":
+                logger.warning("Mempool: RPC %s недоступен — мониторинг ждёт", chain)
+            await asyncio.sleep(interval)
 
     def stop(self):
         self._running = False

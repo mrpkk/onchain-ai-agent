@@ -14,8 +14,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     restart: unless-stopped
 
   postgres:
@@ -26,7 +24,7 @@ services:
       POSTGRES_PASSWORD: agent
       POSTGRES_DB: onchain_ai
     ports:
-      - "5432:5432"
+      - "5433:5432"  # системный PG занят на 5432
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -37,10 +35,13 @@ services:
     restart: unless-stopped
 
   redis:
+    # Опционально: для single-process MVP не требуется (WS/ratelimit/кэш — in-process).
+    # Multi-worker режим: docker compose --profile optional up
+    profiles: ["optional"]
     image: redis:7-alpine
     container_name: onchain-agent-redis
     ports:
-      - "6379:6379"
+      - "6380:6379"  # системный Redis занят на 6379
     volumes:
       - redisdata:/data
     healthcheck:
