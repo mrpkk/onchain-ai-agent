@@ -72,7 +72,9 @@ from ..runtime.replay import replay_decision
 from ..runtime.policy_simulator import simulate_policy_change
 from ..runtime.reports import build_summary, decisions_csv, transactions_csv
 from ..runtime import manager as runtime_manager
+from ..integrations.agent_registry import AgentRegistryError, AgentRegistryService
 from ..integrations.ricardian import RicardianError, RicardianService
+from ..runtime.badges import compute_badges
 from ..security.apikeys import ALLOWED_SCOPES, generate_api_key
 from ..security.dharma import PolicyError, TxContext, build_default_policy, compile_yaml, evaluate
 from ..agent.intent import parse_intent
@@ -600,7 +602,7 @@ async def revoke_api_key(
 
 # ── Ricardian 2-of-3 (S6-03) ─────────────────────────────────────────
 
-def _ricardian_http_error(exc: RicardianError) -> HTTPException:
+def _chain_http_error(exc) -> HTTPException:  # RicardianError | AgentRegistryError
     status_map = {
         "NOT_FOUND": 404,
         "NOT_CONFIGURED": 503,
@@ -636,7 +638,7 @@ async def ricardian_list(
     try:
         agreements = await service.list_agreements(limit=max(1, min(limit, 50)))
     except RicardianError as e:
-        raise _ricardian_http_error(e) from e
+        raise _chain_http_error(e) from e
     return {"agreements": agreements, "total": len(agreements)}
 
 
@@ -649,7 +651,7 @@ async def ricardian_detail(
     try:
         return await service.get_agreement(int(agreement_id))
     except RicardianError as e:
-        raise _ricardian_http_error(e) from e
+        raise _chain_http_error(e) from e
 
 
 @app.post("/api/v1/ricardian/agreements", status_code=201)
@@ -665,7 +667,7 @@ async def ricardian_create(
             milestones=[m.model_dump() for m in body.milestones],
         )
     except RicardianError as e:
-        raise _ricardian_http_error(e) from e
+        raise _chain_http_error(e) from e
 
 
 @app.post("/api/v1/ricardian/agreements/{agreement_id}/sign")
@@ -677,7 +679,7 @@ async def ricardian_sign(
     try:
         return await service.sign(int(agreement_id))
     except RicardianError as e:
-        raise _ricardian_http_error(e) from e
+        raise _chain_http_error(e) from e
 
 
 @app.post("/api/v1/ricardian/agreements/{agreement_id}/milestones/{index}/execute")
@@ -691,7 +693,7 @@ async def ricardian_execute(
     try:
         return await service.execute_milestone(int(agreement_id), int(index), body.payee)
     except RicardianError as e:
-        raise _ricardian_http_error(e) from e
+        raise _chain_http_error(e) from e
 
 
 @app.post("/api/v1/ricardian/agreements/{agreement_id}/milestones/{index}/dispute")
@@ -704,7 +706,141 @@ async def ricardian_dispute(
     try:
         return await service.dispute_milestone(int(agreement_id), int(index))
     except RicardianError as e:
-        raise _ricardian_http_error(e) from e
+        raise _chain_http_error(e) from e
+
+
+# ── ERC-8004 реестр агентов (S6-01) ──────────────────────────────────
+
+@app.get("/api/v1/agents/{agent_id}/registry")
+async def agent_registry_info(
+    agent_id: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+        ref = (agent.config or {}).get("onchain") or {}
+        service = AgentRegistryService()
+        onchain = None
+        if ref.get("agent_id") is not None:
+            try:
+                onchain = await service.get_agent(int(ref["agent_id"]))
+            except AgentRegistryError as e:
+                if e.code != "NOT_FOUND":
+                    raise _chain_http_error(e) from e
+        summary = await build_summary(session, agent.id)
+        health = await compute_health_score(session, agent.id)
+        badges = compute_badges(
+            onchain=onchain, health=health, trust=summary.get("trust"), tier=int(agent.tier or 0)
+        )
+        return {
+            "onchain": onchain,
+            "badges": badges,
+            "contract": service.contract_address,
+            "signer": service.signer_address,
+            "note": "Бейджи — только из реальных данных (реестр/health/trust/tier)",
+        }
+
+
+@app.post("/api/v1/agents/{agent_id}/registry", status_code=201)
+async def agent_registry_register(
+    agent_id: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+        ref = (agent.config or {}).get("onchain") or {}
+        if ref.get("agent_id") is not None:
+            raise HTTPException(status_code=409, detail="Агент уже зарегистрирован в реестре")
+        service = AgentRegistryService()
+        base_name = (agent.name or f"karta-{str(agent.id)[:8]}")[:60]
+        onchain_name = base_name
+        try:
+            if await service.resolve_name(base_name) is not None:
+                onchain_name = f"{base_name[:50]}-{str(agent.id)[:6]}"
+            metadata_uri = (
+                f"{get_settings().public_base_url}/api/v1/registry/agents/{agent.id}/metadata"
+            )
+            result = await service.register(onchain_name, metadata_uri)
+        except AgentRegistryError as e:
+            raise _chain_http_error(e) from e
+        config = dict(agent.config or {})
+        config["onchain"] = {
+            "chain_id": result["chain_id"],
+            "agent_id": result["agent_id"],
+            "name": onchain_name,
+            "tx_hash": result["tx_hash"],
+            "metadata_uri": metadata_uri,
+        }
+        agent.config = config
+        return result
+
+
+@app.post("/api/v1/agents/{agent_id}/registry/verify")
+async def agent_registry_verify(
+    agent_id: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+        ref = (agent.config or {}).get("onchain") or {}
+        if ref.get("agent_id") is None:
+            raise HTTPException(status_code=409, detail="Агент ещё не зарегистрирован в реестре")
+        service = AgentRegistryService()
+        try:
+            result = await service.verify(int(ref["agent_id"]))
+        except AgentRegistryError as e:
+            raise _chain_http_error(e) from e
+        config = dict(agent.config or {})
+        onchain = dict(config.get("onchain") or {})
+        onchain["verified"] = True
+        config["onchain"] = onchain
+        agent.config = config
+        return result
+
+
+@app.post("/api/v1/agents/{agent_id}/registry/sync-reputation")
+async def agent_registry_sync_reputation(
+    agent_id: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+        ref = (agent.config or {}).get("onchain") or {}
+        if ref.get("agent_id") is None:
+            raise HTTPException(status_code=409, detail="Агент ещё не зарегистрирован в реестре")
+        health = await compute_health_score(session, agent.id)
+        service = AgentRegistryService()
+        try:
+            result = await service.set_reputation(int(ref["agent_id"]), int(health["score"]))
+        except AgentRegistryError as e:
+            raise _chain_http_error(e) from e
+        return {**result, "score": health["score"]}
+
+
+@app.get("/api/v1/registry/agents/{agent_id}/metadata")
+async def registry_public_metadata(agent_id: str):
+    """Публичный паспорт агента (metadataURI в реестре): без решений/аудита/политик."""
+    async with session_scope() as session:
+        try:
+            aid = uuid.UUID(agent_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="Agent not found") from None
+        agent = await AgentRepository(session).get(aid)
+        if agent is None:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        ref = (agent.config or {}).get("onchain") or {}
+        return {
+            "name": agent.name,
+            "description": agent.description or "",
+            "karta": {
+                "tier": int(agent.tier or 0),
+                "chain_id": agent.chain_id,
+                "wallet_address": agent.wallet_address,
+                "status": agent.status,
+                "registered_onchain": ref.get("agent_id"),
+            },
+            "note": "Публичный паспорт KARTA: без решений, аудита и политик",
+        }
 
 
 # ── Reports / export (S4-07) ───────────────────────────────────────────

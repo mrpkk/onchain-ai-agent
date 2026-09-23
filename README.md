@@ -55,6 +55,8 @@
 | GET/POST/DELETE | `/api/v1/api-keys` | API-ключи `karta_` для MCP (scope mcp:read) |
 | POST | `/mcp` | MCP-сервер (streamable HTTP, stateless, read-only v1) — см. `docs/MCP.md` |
 | GET/POST | `/api/v1/ricardian/*` | Ricardian 2-of-3: соглашения, подписи, вехи, споры (Sepolia) |
+| GET/POST | `/api/v1/agents/{id}/registry` | ERC-8004-паспорт: регистрация/верификация/репутация + бейджи |
+| GET | `/api/v1/registry/agents/{id}/metadata` | Публичный паспорт агента (metadataURI, без auth) |
 | GET | `/api/v1/health` · `/health` · `/health/deep` | Честные проверки компонентов |
 | WS | `/ws?token=<access>` | Live-события |
 | GET | `/docs` · `/openapi.json` | OpenAPI/Swagger |
@@ -94,7 +96,7 @@ DEBUG=true .venv/bin/uvicorn src.api.main:app --port 8000   # из backend/
 ## 🧪 Тесты
 
 ```bash
-# Backend: 245 тестов + coverage-гейт 80%
+# Backend: 259 тестов + coverage-гейт 80%
 backend/.venv/bin/python -m pytest backend/tests -q --cov=src --cov-fail-under=80
 
 # Контракты: 56 тестов (hardhat)

@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     # Blockchain
     ethereum_rpc_url: str = "https://ethereum-rpc.publicnode.com"  # проверен из РФ 2026-09-22 (306ms); запас: eth.drpc.org, 1rpc.io/eth
     ricardian_rpc_url: str = "https://ethereum-sepolia-rpc.publicnode.com"
+    registry_rpc_url: str = "https://ethereum-sepolia-rpc.publicnode.com"
+    registry_contract_address: str = "0x773945A9eA400e9c8704a2c02AAAbF449cFc20E5"  # Sepolia (S5-03)
+    public_base_url: str = "http://127.0.0.1:8090"  # для metadataURI паспорта
     ricardian_contract_address: str = "0x153010a3f18cf363A87364BB8182Fc13ABF95dF2"  # Sepolia (S5-03)
     mcp_allowed_hosts: list[str] = [  # Host-allowlist MCP (dns-rebinding защита; "host:*" — любой порт)
         "127.0.0.1", "127.0.0.1:*", "localhost", "localhost:*", "testserver",

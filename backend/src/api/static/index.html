@@ -131,6 +131,14 @@
         <button class="btn small ghost" onclick="downloadCsv('audit')" data-i18n="btn.csv_audit">CSV аудит</button>
       </div>
     </section>
+    <section class="panel wide" id="registry-panel" style="display:none">
+      <div class="panel-head">
+        <h3 data-i18n="panel.registry">Паспорт агента (ERC-8004)</h3>
+        <button class="icon-btn" onclick="hideRegistry()">✕</button>
+      </div>
+      <div id="registry-body"></div>
+    </section>
+
     <section class="panel wide">
       <div class="panel-head">
         <h3 data-i18n="panel.ricardian">Соглашения (Ricardian 2-of-3)</h3>

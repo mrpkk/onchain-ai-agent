@@ -102,7 +102,8 @@ def test_dashboard_ids_present(client):
                        "chat-preview", "chat-result", "onboarding-modal",
                        "onb-step-1", "onb-step-3", "report-summary",
                        "approvals-list", "approvals-count", "policy-input",
-                       "policy-preview", "ric-wallet", "ric-parties", "ric-token", "ric-milestones", "ric-list"):
+                       "policy-preview", "ric-wallet", "ric-parties", "ric-token", "ric-milestones", "ric-list",
+                       "registry-panel", "registry-body"):
         assert f'id="{element_id}"' in body, element_id
 
 

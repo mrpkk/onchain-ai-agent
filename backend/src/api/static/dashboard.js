@@ -214,6 +214,12 @@ function renderAgents() {
     head.appendChild(statusBadge(agent.status));
     row.appendChild(head);
     row.appendChild(el("div", "meta", "chain_id " + agent.chain_id + " · " + (agent.strategy || "default")));
+    const onchain = agent.config && agent.config.onchain;
+    if (onchain && onchain.agent_id !== undefined) {
+      const chips = el("div", "meta");
+      chips.appendChild(el("span", "badge", "⛓ #" + onchain.agent_id + (onchain.verified ? " ✓" : "")));
+      row.appendChild(chips);
+    }
     row.onclick = () => selectAgent(agent.id);
 
     const actions = el("div", "agent-actions");
@@ -227,7 +233,9 @@ function renderAgents() {
     goalBtn.onclick = (e) => { e.stopPropagation(); showGoalModal(agent.id); };
     const txBtn = el("button", "btn small ghost", t("btn.tx"));
     txBtn.onclick = (e) => { e.stopPropagation(); showTxPanel(agent.id); };
-    actions.append(startBtn, stopBtn, killBtn, goalBtn, txBtn);
+    const passportBtn = el("button", "btn small ghost", t("btn.passport"));
+    passportBtn.onclick = (e) => { e.stopPropagation(); openRegistry(agent.id); };
+    actions.append(startBtn, stopBtn, killBtn, goalBtn, txBtn, passportBtn);
     row.appendChild(actions);
     list.appendChild(row);
   });
@@ -888,6 +896,69 @@ async function createRicardian() {
   if (res && res.tx_hash) {
     toast(t("ric.created") + " #" + res.agreement_id, "success");
     refreshRicardian();
+  } else {
+    toast((res && res.detail) || t("ric.error"), "error");
+  }
+}
+
+
+/* ── Паспорт агента / ERC-8004 (S6-01) ────────────────────────────── */
+async function openRegistry(agentId) {
+  const panel = document.getElementById("registry-panel");
+  const body = document.getElementById("registry-body");
+  panel.style.display = "block";
+  body.replaceChildren(el("div", "empty", "…"));
+  const data = await api("/api/v1/agents/" + agentId + "/registry");
+  body.replaceChildren();
+  if (!data || data.error) {
+    body.appendChild(el("div", "empty", (data && data.detail) || t("ric.error")));
+    return;
+  }
+  const badges = el("div", "intent-actions");
+  (data.badges || []).forEach((b) => {
+    const chip = el("span", "badge", t("badge." + b.id) + (b.value !== null && b.value !== undefined ? " " + b.value : ""));
+    chip.dataset.state = b.tone === "success" ? "live" : undefined;
+    badges.appendChild(chip);
+  });
+  body.appendChild(badges);
+  const info = el("div", "muted");
+  info.style.fontSize = ".74rem";
+  if (data.onchain) {
+    info.textContent = "#" + data.onchain.agent_id + " · " + data.onchain.name +
+      " · rep " + data.onchain.reputation + (data.onchain.verified ? " · verified" : "") +
+      " · " + data.onchain.metadata_uri;
+  } else {
+    info.textContent = t("registry.none");
+  }
+  body.appendChild(info);
+  const actions = el("div", "intent-actions");
+  if (!data.onchain) {
+    const reg = el("button", "btn primary small", t("registry.register"));
+    reg.onclick = () => registryAction(agentId, "register", "POST");
+    actions.appendChild(reg);
+  } else {
+    if (!data.onchain.verified) {
+      const ver = el("button", "btn small ghost", t("registry.verify"));
+      ver.onclick = () => registryAction(agentId, "verify", "POST");
+      actions.appendChild(ver);
+    }
+    const sync = el("button", "btn small ghost", t("registry.sync_rep"));
+    sync.onclick = () => registryAction(agentId, "sync-reputation", "POST");
+    actions.appendChild(sync);
+  }
+  body.appendChild(actions);
+}
+
+function hideRegistry() {
+  document.getElementById("registry-panel").style.display = "none";
+}
+
+async function registryAction(agentId, action, method) {
+  const res = await api("/api/v1/agents/" + agentId + "/registry" + (action === "register" ? "" : "/" + action), { method: method });
+  if (res && res.tx_hash) {
+    toast(t("ric.tx_ok") + " " + res.tx_hash.slice(0, 12) + "…", "success");
+    loadAgents();
+    openRegistry(agentId);
   } else {
     toast((res && res.detail) || t("ric.error"), "error");
   }
