@@ -130,7 +130,7 @@
 > 2. **Foundry ✅ УСТАНОВЛЕН** (владелец разрешил 22.09): forge/cast/anvil 1.8.1 в `~/.foundry/bin`, up to date.
 > 3. **Бюджет тестов:** real-money нет; Sepolia-краник бесплатно (Google Cloud ~0.05 ETH/24ч — требует 0.001 ETH mainnet; PoW-кран pk910 — без требований; Alchemy 0.1 ETH/день — требует 0.001 mainnet).
 > 4. **4337:** только локальный EntryPoint (решение владельца 22.09); bundler/paymaster платные — не используем.
-> 5. **Sepolia-деплой:** ждёт решения владельца (вопрос «зачем» — объяснено в отчёте 22.09: реальные условия сети, верификация контрактов в explorer, e2e на живой сети, подготовка P6/портфолио).
+> 5. **Sepolia-деплой ✅ ВЫПОЛНЕН 23.09** — кошелёк владельца, 4 контракта + live-смоук (см. S5-03 ниже); баланс после: 0.1540 ETH. Краны: без mainnet-баланса из РФ реально работает только PoW `sepolia-faucet.pk910.de` (майнинг в браузере; при нужде — автоматизирую через headless Thorium); Google/Alchemy/Infura/Chainlink требуют 0.001 ETH mainnet.
 >
 > **Смета (соло+AI):** S5-04 EIP-1559 — 1 дн · S5-05 private RPC — 1 дн · S5-07 multi-chain (+Base) — 2–3 дн · S5-01 swap (агрегатор+slippage-guard) — 3–4 дн · S5-02 bridge — 2–3 дн · S5-06 ERC-4337 (session keys по готовой таблице; bundler/paymaster платные → локальный EntryPoint в тестах) — 4–6 дн · S5-03 deploy Sepolia — 1–2 дн (отдельная команда). **Итого ≈ 3–4 недели.**
 >
@@ -138,7 +138,8 @@
 >
 > **Вопросы владельцу — ОТВЕТЫ 22.09:** (1) RPC — ✅ бесплатные РФ-доступные (проверены живьём, дефолт PublicNode); (2) Foundry — ✅ ставим (установлен 1.8.1); (3) 4337 — ✅ только локальный EntryPoint; (4) Sepolia — вопрос «зачем» задан владельцем, объяснение дано; **ждёт: деплоим сейчас / после кода P5**. Старт P5 — по команде («запускай P5»/«запускай S5-04»).
 
-- [ ] S5-01 Swap (1inch/агрегатор + slippage-guard) · S5-02 Bridge · S5-03 Deploy
+- [x] S5-03 Deploy Sepolia: **выполнено 23.09 кошельком владельца** (`WALLET_METAMASK_ETH_ERC20`), RPC PublicNode. **AgentRegistry** `0x773945A9eA400e9c8704a2c02AAAbF449cFc20E5` · **Escrow** (арбитр=деплоер, тестнет) `0xB73c9F99d40116501C0a18c4019Ac8E91ED7dE8a` · **RicardianAgreement** `0x153010a3f18cf363A87364BB8182Fc13ABF95dF2` · **MockERC20 (mUSDC)** `0x212774d426519437d5Eb1126fE382fC7b7cCe7B0`. **Live-смоук**: `registerAgent` tx `0x372abb…54bcda` (block 11762219, status 1, agentId 0, событие AgentRegistered). Запись: `smart-contracts/deployments/sepolia.json`. Расход: ≈0.0033 ETH (баланс 0.1540). Коммит `d14fea9`.
+- [ ] S5-01 Swap (1inch/агрегатор + slippage-guard) · S5-02 Bridge
 - [ ] S5-04 EIP-1559 + газ-оракул · S5-05 Private RPC (Flashbots-класс) + jitter
 - [ ] S5-06 ERC-4337: smart account + session keys (TTL, revoke) + paymaster + social recovery
 - [ ] S5-07 Multi-chain adapter (сеть = config {rpc[], explorer, finality, health})
@@ -195,7 +196,8 @@ F1 Gasless ERC-4337 · F2 Digital twin · F3 Copilot · F4 Intent-engine · F5 �
 | 23 | 2026-09-18 | S4-16 Docs-пакет (SECURITY/ARCHITECTURE/API + генератор) + fix compose redis-profile | `c3b6f7b` | 218/218 | API.md авто-генерация; compose валидирован |
 | 24 | 2026-09-18 | S4-17 Реконсиляция при старте + coverage-гейт + e2e_live.py в репо + README-синк | `58fcfe6` `c5ced6d` | 221/221 + live-смоук 13/13 | честные состояния после падения процесса |
 | 25 | 2026-09-22 | **Мерж v2.0-alpha в main** (тег, merge `4b8b7d3`) + **S4-09 лого K** (ассеты+кокпит+манифест, `38dcf8c`) | `4b8b7d3` `38dcf8c` | 225/225 | P4 закрыта 10/10; выбор лого владельцем |
-| 26 | 2026-09-22 | Инфра P5: **RPC из РФ проверен** (publicnode/drpc/1rpc; дефолт обновлён) + **Foundry 1.8.1** + `TG_KARTA_BOT`-алиас + правило ≤1ГБ | (в этом коммите) | 223/223 + health rpc:ok | health: rpc ok (блок mainnet) |
+| 26 | 2026-09-22 | Инфра P5: **RPC из РФ проверен** (publicnode/drpc/1rpc; дефолт обновлён) + **Foundry 1.8.1** + `TG_KARTA_BOT`-алиас + правило ≤1ГБ | `1760a97` | 225/225 + health rpc:ok | health: rpc ok (блок mainnet) |
+| 27 | 2026-09-23 | **S5-03 Деплой Sepolia** — 4 контракта + live registerAgent (status 1, agentId 0); `deployments/sepolia.json`; deploy.js пишет tx-хэши | `d14fea9` | 56 контрактных (локально) + live | баланс 0.1540 ETH; арбитр Escrow = деплоер (тестнет) |
 
 ## 💡 ИДЕИ НА ОБСУЖДЕНИЕ (новое — предлагать после отчётов)
 
