@@ -34,9 +34,9 @@
 
 ## 🧭 ТЕКУЩИЙ ШАГ (обновлять при каждом слайсе)
 
-**Статус:** **P0–P4 закрыты полностью** (P4 = 10/10 после S4-09; сверх плана закрыты S4-15 SAST/dep-audit, S4-16 docs-пакет, S4-17 ops-реконсиляция). **v2.0-alpha в main** (тег, merge `4b8b7d3`). Тесты: **225 backend + 56 контрактных** (вкл. coverage-гейт 80%, bandit medium+ = 0, pip-audit = 0). Live E2E: `scripts/e2e_live.py` 13/13.
+**Статус:** **P0–P4 закрыты полностью** (P4 = 10/10 после S4-09; сверх плана закрыты S4-15 SAST/dep-audit, S4-16 docs-пакет, S4-17 ops-реконсиляция). **v2.0-alpha в main** (тег, merge `4b8b7d3`). Тесты: **235 backend + 56 контрактных** (вкл. coverage-гейт 80%, bandit medium+ = 0, pip-audit = 0). Live E2E: `scripts/e2e_live.py` 13/13.
 **Инфраструктура P5 (22.09):** **RPC ✅ работает из РФ** — `ethereum-rpc.publicnode.com` (306ms, дефолт в settings), запас `eth.drpc.org`, `1rpc.io/eth`; health показывает `rpc: ok` (реальный блок mainnet). **Foundry ✅** установлен (forge/cast/anvil 1.8.1, up to date). **4337 — локальный EntryPoint** (решение владельца). **Sepolia-деплой** — ждёт решения владельца («зачем?» — объяснение в отчёте 22.09; вопрос «деплоим сейчас/после P5»).
-**P6 стартовал (22.09):** S6-04 MCP-сервер наружу (рекомендация: local-first) → S6-03 Ricardian UI → S6-01 ERC-8004 (local) → S6-02 Escrow (local) → on-chain часть после P5.
+**P6 идёт (23.09):** **S6-04 ✅ MCP-сервер** (streamable HTTP, read-only 8 tools, ключи `karta_`, контракты+docs; live на :8090) → дальше S6-03 Ricardian UI → S6-01 ERC-8004 (local) → S6-02 Escrow (local). **P5:** S5-03 ✅ (Sepolia задеплоен); старт S5-04/S5-05 — по команде («запускай S5-04»).
 **STOP-GATE (ранее 6) — ЗАКРЫТЫ все:** execution-граница = тиры 0–1 симуляция (реальное — P5); PG docker ✅; DeepSeek-ключ ✅; `backend/.env` выведен из контура ✅; фронтенд A ✅; футуристики — в P7 (по решению).
 
 ---
@@ -159,7 +159,8 @@
 >
 > **Вопросы владельцу:** (1) начинать P6 до P5 или после? (2) S6-04: KARTA как MCP-сервер наружу — кому (партнёрам/публично) и где (локально/VPS)? (3) Ricardian 2-of-3: кто третий арбитр (владелец/сервис)? (4) x402 — рассматривать вообще?
 
-- [ ] S6-01 ERC-8004 live + бейджи · S6-02 Аренда через Escrow · S6-03 Ricardian 2-of-3 UI · S6-04 MCP-сервер наружу · S6-05 x402 — STOP GATE
+- [x] S6-04 MCP-сервер наружу (v1, local-first): **streamable HTTP (stateless) на `POST /mcp`** — `backend/src/mcp/` (`contracts.py` — pinned-контракты 8 read-tools + gated write; `server.py` — MCPServer 2.0 + `MCPDispatcher` со свежим app на lifespan). Auth: `Authorization: Bearer karta_…` в каждом вызове (через `Context.headers`) → строгий owner-scope. **API-ключи `karta_`**: SHA-256 в `api_keys` (миграция `0003`: name/prefix), эндпоинты `POST/GET/DELETE /api/v1/api-keys` (скоупы `mcp:read/mcp:write`, ownership-изоляция). **READ-tools (SPEC §10):** `get_wallet` · `get_balance` · `get_gas` · `get_portfolio` (честно: токены — Phase 5) · `get_transactions` · `agent_status` (health/trust/drift) · `audit_log` (Sakshi) · `get_decision` (Replay). **WRITE — gated, не зарегистрированы** (тест). OWASP MCP: pinned definitions + parity-тест, owner-изоляция, Host-allowlist `KARTA_MCP_ALLOWED_HOSTS`, структурированные ошибки. Docs: `docs/MCP.md` (Claude/Cursor/OpenCode) + `docs/MCP_TOOL_CONTRACTS.md` (генератор + parity). Живая проверка на :8090 (tools/list + agent_status с реальным health/trust/drift). 10 тестов. Коммит `cc59f7e`. Долг: rate-limit MCP (SPEC: write 10/мин) — при включении write.
+- [ ] S6-01 ERC-8004 live + бейджи · S6-02 Аренда через Escrow · S6-03 Ricardian 2-of-3 UI · S6-05 x402 — STOP GATE
 
 ### P7 — FUTURE LAB (меню: F1–F11)
 F1 Gasless ERC-4337 · F2 Digital twin · F3 Copilot · F4 Intent-engine · F5 Агент-экономика · F6 TEE/ZK · F7 x402 · F8 Councils · F9 A2A · F10 MPP · F11 zkML.
@@ -195,9 +196,10 @@ F1 Gasless ERC-4337 · F2 Digital twin · F3 Copilot · F4 Intent-engine · F5 �
 | 22 | 2026-09-18 | S4-15 SAST/dep-audit (CA НУЦ, PyJWT, CI bandit+pip-audit) | `51d8e73` | 218/218 | bandit medium+ 0 · pip-audit 0 |
 | 23 | 2026-09-18 | S4-16 Docs-пакет (SECURITY/ARCHITECTURE/API + генератор) + fix compose redis-profile | `c3b6f7b` | 218/218 | API.md авто-генерация; compose валидирован |
 | 24 | 2026-09-18 | S4-17 Реконсиляция при старте + coverage-гейт + e2e_live.py в репо + README-синк | `58fcfe6` `c5ced6d` | 221/221 + live-смоук 13/13 | честные состояния после падения процесса |
-| 25 | 2026-09-22 | **Мерж v2.0-alpha в main** (тег, merge `4b8b7d3`) + **S4-09 лого K** (ассеты+кокпит+манифест, `38dcf8c`) | `4b8b7d3` `38dcf8c` | 225/225 | P4 закрыта 10/10; выбор лого владельцем |
+| 25 | 2026-09-22 | **Мерж v2.0-alpha в main** (тег, merge `4b8b7d3`) + **S4-09 лого K** (ассеты+кокпит+манифест, `38dcf8c`) | `4b8b7d3` `38dcf8c` | 235/235 | P4 закрыта 10/10; выбор лого владельцем |
 | 26 | 2026-09-22 | Инфра P5: **RPC из РФ проверен** (publicnode/drpc/1rpc; дефолт обновлён) + **Foundry 1.8.1** + `TG_KARTA_BOT`-алиас + правило ≤1ГБ | `1760a97` | 225/225 + health rpc:ok | health: rpc ok (блок mainnet) |
 | 27 | 2026-09-23 | **S5-03 Деплой Sepolia** — 4 контракта + live registerAgent (status 1, agentId 0); `deployments/sepolia.json`; deploy.js пишет tx-хэши | `d14fea9` | 56 контрактных (локально) + live | баланс 0.1540 ETH; арбитр Escrow = деплоер (тестнет) |
+| 28 | 2026-09-23 | **S6-04 MCP-сервер** (streamable HTTP read-only 8 tools) + API-ключи `karta_` + docs/контракты | `cc59f7e` | 235/235 + live MCP | P6 пошёл; write-tools gated |
 
 ## 💡 ИДЕИ НА ОБСУЖДЕНИЕ (новое — предлагать после отчётов)
 
