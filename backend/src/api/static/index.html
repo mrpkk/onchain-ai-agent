@@ -131,6 +131,22 @@
         <button class="btn small ghost" onclick="downloadCsv('audit')" data-i18n="btn.csv_audit">CSV аудит</button>
       </div>
     </section>
+    <section class="panel wide">
+      <div class="panel-head">
+        <h3 data-i18n="panel.ricardian">Соглашения (Ricardian 2-of-3)</h3>
+        <button class="btn ghost small" onclick="refreshRicardian()" data-i18n="btn.refresh">Обновить</button>
+      </div>
+      <div class="muted" id="ric-wallet" style="font-size:.74rem"></div>
+      <div class="chat-row" style="margin:8px 0">
+        <input id="ric-parties" data-i18n-placeholder="ric.parties_ph">
+        <input id="ric-token" value="0x212774d426519437d5Eb1126fE382fC7b7cCe7B0" title="mUSDC (Sepolia)">
+      </div>
+      <textarea id="ric-milestones" rows="2" style="width:100%;margin-bottom:8px" data-i18n-placeholder="ric.milestones_ph"></textarea>
+      <div class="intent-actions">
+        <button class="btn primary small" onclick="createRicardian()" data-i18n="ric.create">Создать соглашение</button>
+      </div>
+      <div id="ric-list" class="feed" style="margin-top:10px"><div class="empty">—</div></div>
+    </section>
   </main>
 
   <div class="tx-panel" id="tx-panel">

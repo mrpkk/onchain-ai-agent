@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -5,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", os.path.expanduser("~/.env")),  # локальный + мастер-~/.env (секреты)
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",  # мастер-~/.env содержит сотни чужих ключей — не падать
@@ -15,6 +16,10 @@ class Settings(BaseSettings):
     app_name: str = "OnChain AI Agent"
     app_version: str = "1.0.0"
     debug: bool = False
+
+    # Ricardian signer (S6-03; тестнет-кошелёк)
+    karta_ricardian_private_key: str = ""
+    wallet_metamask_eth_erc20_private_key: str = ""
 
     # API Keys
     mistral_api_key: str = ""
@@ -39,6 +44,8 @@ class Settings(BaseSettings):
 
     # Blockchain
     ethereum_rpc_url: str = "https://ethereum-rpc.publicnode.com"  # проверен из РФ 2026-09-22 (306ms); запас: eth.drpc.org, 1rpc.io/eth
+    ricardian_rpc_url: str = "https://ethereum-sepolia-rpc.publicnode.com"
+    ricardian_contract_address: str = "0x153010a3f18cf363A87364BB8182Fc13ABF95dF2"  # Sepolia (S5-03)
     mcp_allowed_hosts: list[str] = [  # Host-allowlist MCP (dns-rebinding защита; "host:*" — любой порт)
         "127.0.0.1", "127.0.0.1:*", "localhost", "localhost:*", "testserver",
     ]  # проверен из РФ 2026-09-22 (306ms); запас: eth.drpc.org, 1rpc.io/eth

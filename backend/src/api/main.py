@@ -49,6 +49,9 @@ from .models import (
     PolicyValidateRequest,
     PolicyValidateResponse,
     RefreshRequest,
+    RicardianCreateRequest,
+    RicardianExecuteRequest,
+    RicardianMilestoneIn,
     TierRequest,
     TokenRequest,
     TokenResponse,
@@ -69,6 +72,7 @@ from ..runtime.replay import replay_decision
 from ..runtime.policy_simulator import simulate_policy_change
 from ..runtime.reports import build_summary, decisions_csv, transactions_csv
 from ..runtime import manager as runtime_manager
+from ..integrations.ricardian import RicardianError, RicardianService
 from ..security.apikeys import ALLOWED_SCOPES, generate_api_key
 from ..security.dharma import PolicyError, TxContext, build_default_policy, compile_yaml, evaluate
 from ..agent.intent import parse_intent
@@ -592,6 +596,115 @@ async def revoke_api_key(
             scopes=(key.scopes or {}).get("list", []), created_at=key.created_at,
             last_used_at=key.last_used_at, revoked=True,
         )
+
+
+# ── Ricardian 2-of-3 (S6-03) ─────────────────────────────────────────
+
+def _ricardian_http_error(exc: RicardianError) -> HTTPException:
+    status_map = {
+        "NOT_FOUND": 404,
+        "NOT_CONFIGURED": 503,
+        "SIGNER_MISSING": 503,
+        "MAINNET_FORBIDDEN": 403,
+        "RPC_UNAVAILABLE": 503,
+        "SIMULATION_REVERT": 422,
+        "BAD_INPUT": 422,
+    }
+    return HTTPException(
+        status_code=status_map.get(exc.code, 502),
+        detail=f"{exc.code}: {exc.message}",
+    )
+
+
+@app.get("/api/v1/ricardian/wallet")
+async def ricardian_wallet(current_user: Annotated[dict, Depends(get_current_user)]):
+    service = RicardianService()
+    return {
+        "signer": service.signer_address,
+        "contract": service.contract_address,
+        "chain": "sepolia",
+        "ready": service.signer_address is not None,
+    }
+
+
+@app.get("/api/v1/ricardian/agreements")
+async def ricardian_list(
+    current_user: Annotated[dict, Depends(get_current_user)],
+    limit: int = 20,
+):
+    service = RicardianService()
+    try:
+        agreements = await service.list_agreements(limit=max(1, min(limit, 50)))
+    except RicardianError as e:
+        raise _ricardian_http_error(e) from e
+    return {"agreements": agreements, "total": len(agreements)}
+
+
+@app.get("/api/v1/ricardian/agreements/{agreement_id}")
+async def ricardian_detail(
+    agreement_id: int,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    service = RicardianService()
+    try:
+        return await service.get_agreement(int(agreement_id))
+    except RicardianError as e:
+        raise _ricardian_http_error(e) from e
+
+
+@app.post("/api/v1/ricardian/agreements", status_code=201)
+async def ricardian_create(
+    body: RicardianCreateRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    service = RicardianService()
+    try:
+        return await service.create_agreement(
+            parties=body.parties,
+            token=body.token,
+            milestones=[m.model_dump() for m in body.milestones],
+        )
+    except RicardianError as e:
+        raise _ricardian_http_error(e) from e
+
+
+@app.post("/api/v1/ricardian/agreements/{agreement_id}/sign")
+async def ricardian_sign(
+    agreement_id: int,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    service = RicardianService()
+    try:
+        return await service.sign(int(agreement_id))
+    except RicardianError as e:
+        raise _ricardian_http_error(e) from e
+
+
+@app.post("/api/v1/ricardian/agreements/{agreement_id}/milestones/{index}/execute")
+async def ricardian_execute(
+    agreement_id: int,
+    index: int,
+    body: RicardianExecuteRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    service = RicardianService()
+    try:
+        return await service.execute_milestone(int(agreement_id), int(index), body.payee)
+    except RicardianError as e:
+        raise _ricardian_http_error(e) from e
+
+
+@app.post("/api/v1/ricardian/agreements/{agreement_id}/milestones/{index}/dispute")
+async def ricardian_dispute(
+    agreement_id: int,
+    index: int,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    service = RicardianService()
+    try:
+        return await service.dispute_milestone(int(agreement_id), int(index))
+    except RicardianError as e:
+        raise _ricardian_http_error(e) from e
 
 
 # ── Reports / export (S4-07) ───────────────────────────────────────────

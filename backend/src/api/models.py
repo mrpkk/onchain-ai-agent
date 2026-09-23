@@ -307,3 +307,21 @@ class ApiKeyInfo(BaseModel):
     created_at: datetime
     last_used_at: Optional[datetime] = None
     revoked: bool = False
+
+
+# ── Ricardian 2-of-3 (S6-03) ─────────────────────────────────────────
+
+class RicardianMilestoneIn(BaseModel):
+    description: str
+    amount_wei: str  # строка, чтобы не терять точность (wei)
+    deadline: int    # unix timestamp
+
+
+class RicardianCreateRequest(BaseModel):
+    parties: list[str] = Field(default_factory=list)
+    token: str
+    milestones: list[RicardianMilestoneIn] = Field(default_factory=list)
+
+
+class RicardianExecuteRequest(BaseModel):
+    payee: str

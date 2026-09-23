@@ -16,6 +16,7 @@ function onLangChanged() {
     renderStatusCard();
     if (SELECTED) { refreshFeed(); refreshPending(); refreshAudit(); refreshReport(); }
     refreshApprovals();
+    refreshRicardian();
   }
 }
 
@@ -134,6 +135,7 @@ function showDashboard() {
   document.getElementById("dash-username").textContent = USERNAME;
   loadAgents();
   refreshApprovals();
+  refreshRicardian();
   connectWS();
 }
 
@@ -794,3 +796,99 @@ async function showTxPanel(agentId) {
   });
 }
 function hideTxPanel() { document.getElementById("tx-panel").classList.remove("show"); }
+
+
+/* ── Ricardian 2-of-3 (S6-03) ─────────────────────────────────────── */
+async function refreshRicardian() {
+  const list = document.getElementById("ric-list");
+  if (!list) return;
+  const wallet = document.getElementById("ric-wallet");
+  const info = await api("/api/v1/ricardian/wallet");
+  if (wallet && info && !info.error) {
+    wallet.textContent = t("ric.signer") + ": " + (info.signer || t("ric.no_signer"));
+  }
+  const data = await api("/api/v1/ricardian/agreements");
+  list.innerHTML = "";
+  if (!data || data.error || !data.agreements) {
+    list.appendChild(el("div", "empty", (data && data.detail) || t("ric.error")));
+    return;
+  }
+  if (!data.agreements.length) {
+    list.appendChild(el("div", "empty", t("ric.empty")));
+    return;
+  }
+  data.agreements.forEach((a) => list.appendChild(ricCard(a)));
+}
+
+function ricCard(a) {
+  const card = el("div", "decision-card");
+  const head = el("div", "decision-head");
+  head.appendChild(el("span", "badge", "#" + a.id + " · " + a.status));
+  head.appendChild(el("span", "muted", "✔ " + a.sign_count + "/2"));
+  card.appendChild(head);
+  const ms = el("div", "muted");
+  ms.style.fontSize = ".74rem";
+  ms.textContent = (a.milestones || [])
+    .map((m) => m.index + ". " + m.description + " — " + m.amount_wei +
+      (m.completed ? " ✔" : m.disputed ? " ⚠" : ""))
+    .join(" · ");
+  card.appendChild(ms);
+  const actions = el("div", "intent-actions");
+  const signBtn = el("button", "btn small ghost", t("ric.sign"));
+  signBtn.onclick = () => ricAction(a.id, "sign");
+  const execBtn = el("button", "btn small ghost", t("ric.execute"));
+  execBtn.onclick = () => {
+    const payee = prompt(t("ric.payee_prompt"), "");
+    if (payee) ricAction(a.id, "execute", 0, payee);
+  };
+  const dispBtn = el("button", "btn small ghost", t("ric.dispute"));
+  dispBtn.onclick = () => ricAction(a.id, "dispute", 0);
+  actions.append(signBtn, execBtn, dispBtn);
+  card.appendChild(actions);
+  return card;
+}
+
+async function ricAction(id, action, index = 0, payee = "") {
+  let url = "/api/v1/ricardian/agreements/" + id + "/" + action;
+  let body;
+  if (action === "execute") {
+    url = "/api/v1/ricardian/agreements/" + id + "/milestones/" + index + "/execute";
+    body = { payee: payee };
+  }
+  if (action === "dispute") {
+    url = "/api/v1/ricardian/agreements/" + id + "/milestones/" + index + "/dispute";
+  }
+  const res = await api(url, { method: "POST", body: body });
+  if (res && res.tx_hash) {
+    toast(t("ric.tx_ok") + " " + res.tx_hash.slice(0, 12) + "…", "success");
+    refreshRicardian();
+  } else {
+    toast((res && res.detail) || t("ric.error"), "error");
+  }
+}
+
+async function createRicardian() {
+  const parties = (document.getElementById("ric-parties").value || "")
+    .split(",").map((v) => v.trim()).filter(Boolean);
+  const token = (document.getElementById("ric-token").value || "").trim();
+  const lines = (document.getElementById("ric-milestones").value || "")
+    .split("\n").map((v) => v.trim()).filter(Boolean);
+  const milestones = lines.map((line) => {
+    const parts = line.split("|").map((v) => v.trim());
+    return { description: parts[0], amount_wei: parts[1], deadline: parseInt(parts[2], 10) };
+  });
+  if (!token || !milestones.length) {
+    toast(t("ric.fill"), "error");
+    return;
+  }
+  const res = await api("/api/v1/ricardian/agreements", {
+    method: "POST",
+    body: { parties: parties, token: token, milestones: milestones },
+  });
+  if (res && res.tx_hash) {
+    toast(t("ric.created") + " #" + res.agreement_id, "success");
+    refreshRicardian();
+  } else {
+    toast((res && res.detail) || t("ric.error"), "error");
+  }
+}
