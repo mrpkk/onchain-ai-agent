@@ -52,6 +52,8 @@
 | GET/POST/PUT | `/api/v1/decisions/{id}` | Replay: текущий вердикт vs сохранённый |
 | POST | `/api/v1/agents/{id}/kill-switch` | Экстренная остановка (soft/hard, терминальная) |
 | GET | `/api/v1/agents/{id}/transactions` | История транзакций |
+| GET/POST/DELETE | `/api/v1/api-keys` | API-ключи `karta_` для MCP (scope mcp:read) |
+| POST | `/mcp` | MCP-сервер (streamable HTTP, stateless, read-only v1) — см. `docs/MCP.md` |
 | GET | `/api/v1/health` · `/health` · `/health/deep` | Честные проверки компонентов |
 | WS | `/ws?token=<access>` | Live-события |
 | GET | `/docs` · `/openapi.json` | OpenAPI/Swagger |
@@ -91,7 +93,7 @@ DEBUG=true .venv/bin/uvicorn src.api.main:app --port 8000   # из backend/
 ## 🧪 Тесты
 
 ```bash
-# Backend: 221 тест + coverage-гейт 80%
+# Backend: 235 тестов + coverage-гейт 80%
 backend/.venv/bin/python -m pytest backend/tests -q --cov=src --cov-fail-under=80
 
 # Контракты: 56 тестов (hardhat)
@@ -121,6 +123,7 @@ Human → REST /api/v1 + WS /ws → [Dharma Engine] → [Simulation] → [Timelo
 - `docs/ARCHITECTURE_CURRENT.md` — фактическая архитектура (до модернизации)
 - `docs/ARCHITECTURE.md` · `docs/SECURITY.md` — as-built архитектура и security-posture
 - `docs/API.md` — перечень API (генератор `docs/generate_api_md.py`)
+- `docs/MCP.md` · `docs/MCP_TOOL_CONTRACTS.md` — MCP-сервер: подключение и контракты (генератор `docs/generate_mcp_contracts.py`)
 - `smart-contracts/` — Solidity 0.8.20 + Hardhat
 
 ---

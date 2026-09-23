@@ -39,6 +39,9 @@ class Settings(BaseSettings):
 
     # Blockchain
     ethereum_rpc_url: str = "https://ethereum-rpc.publicnode.com"  # проверен из РФ 2026-09-22 (306ms); запас: eth.drpc.org, 1rpc.io/eth
+    mcp_allowed_hosts: list[str] = [  # Host-allowlist MCP (dns-rebinding защита; "host:*" — любой порт)
+        "127.0.0.1", "127.0.0.1:*", "localhost", "localhost:*", "testserver",
+    ]  # проверен из РФ 2026-09-22 (306ms); запас: eth.drpc.org, 1rpc.io/eth
     chain_id: int = 1
     agent_wallet_private_key: str = ""
 

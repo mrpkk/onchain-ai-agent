@@ -1,4 +1,4 @@
-"""SQLAlchemy-модели KARTA (SPEC S2-01, §6.1): 14 таблиц.
+"""SQLAlchemy-модели KARTA (SPEC S2-01, §6.1): 15 таблиц.
 
 Кросс-диалектность: UUID/JSON работают и на PostgreSQL (JSONB), и в SQLite
 (тестовый фолбэк). Enum-поля — String с документированными значениями.
@@ -49,10 +49,14 @@ class RefreshToken(Base):
 
 
 class ApiKey(Base):
+    """API-ключ (`karta_`) для MCP/REST-доступа (S6-04). В БД только SHA-256."""
+
     __tablename__ = "api_keys"
 
     id: Mapped[uuid.UUID] = mapped_column(sa.Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(sa.ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(sa.String(64), default="mcp")
+    prefix: Mapped[str] = mapped_column(sa.String(16), default="")
     key_hash: Mapped[str] = mapped_column(sa.String(128), unique=True)
     scopes: Mapped[dict] = mapped_column(JSONType, default=dict)
     last_used_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)

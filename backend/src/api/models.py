@@ -281,3 +281,29 @@ class DecisionReplayResponse(BaseModel):
     now: dict = Field(default_factory=dict)
     verdict_changed: bool = False
     note: str = ""
+
+
+# ── API-ключи (S6-04) ─────────────────────────────────────────────────
+
+class ApiKeyCreate(BaseModel):
+    name: str = "mcp"
+    scopes: list[str] = Field(default_factory=lambda: ["mcp:read"])
+
+
+class ApiKeyCreated(BaseModel):
+    id: str
+    name: str
+    prefix: str
+    scopes: list[str]
+    created_at: datetime
+    key: str  # плейн-ключ показывается ОДИН раз
+
+
+class ApiKeyInfo(BaseModel):
+    id: str
+    name: str
+    prefix: str
+    scopes: list[str]
+    created_at: datetime
+    last_used_at: Optional[datetime] = None
+    revoked: bool = False

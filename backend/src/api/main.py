@@ -19,6 +19,9 @@ from pydantic import BaseModel
 
 from .models import (
     AgentCreate,
+    ApiKeyCreate,
+    ApiKeyCreated,
+    ApiKeyInfo,
     AgentListResponse,
     AgentResponse,
     AgentStatus,
@@ -56,8 +59,8 @@ from .models import (
     UserOut,
 )
 from ..config.settings import get_settings, validate_security
-from ..db import (AgentRepository, ApprovalRepository, DecisionRepository, PolicyRepository,
-                  TransactionRepository, UserRepository, create_all, session_scope)
+from ..db import (AgentRepository, ApiKeyRepository, ApprovalRepository, DecisionRepository,
+                  PolicyRepository, TransactionRepository, UserRepository, create_all, session_scope)
 from ..runtime import TIER_POLICY_TEMPLATES, build_agent
 from ..runtime.approvals import resolve_approval
 from ..runtime.drift import detect_drift
@@ -66,6 +69,7 @@ from ..runtime.replay import replay_decision
 from ..runtime.policy_simulator import simulate_policy_change
 from ..runtime.reports import build_summary, decisions_csv, transactions_csv
 from ..runtime import manager as runtime_manager
+from ..security.apikeys import ALLOWED_SCOPES, generate_api_key
 from ..security.dharma import PolicyError, TxContext, build_default_policy, compile_yaml, evaluate
 from ..agent.intent import parse_intent
 from ..agent.policy_intent import build_policy_yaml, parse_policy_rule
@@ -116,6 +120,9 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 from contextlib import asynccontextmanager as _asynccontextmanager
 
 
+from ..mcp.server import mcp_dispatcher  # noqa: E402
+
+
 @_asynccontextmanager
 async def _lifespan(_app: FastAPI):
     await create_all()  # dev-convenience; в прод-контуре схема ведётся Alembic
@@ -141,7 +148,8 @@ async def _lifespan(_app: FastAPI):
             logging.getLogger("uvicorn.error").info("Telegram poller запущен")
     except Exception as e:  # noqa: BLE001 — не роняем старт из-за интеграции
         logging.getLogger("uvicorn.error").warning("Telegram poller не запущен: %s", e)
-    yield
+    async with mcp_dispatcher.lifespan():
+        yield
     if telegram_task is not None:
         stop_event.set()
         telegram_task.cancel()
@@ -169,6 +177,34 @@ app = FastAPI(
 
 app.include_router(ws_router)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+# MCP-сервер (S6-04): streamable HTTP (stateless) на POST /mcp
+from starlette.routing import Route as _StarletteRoute  # noqa: E402
+
+
+async def _mcp_forward(request: Request) -> Response:
+    """Точная точка POST /mcp без redirect 307: запрос уходит в MCP-диспетчер (path → /)."""
+    scope = dict(request.scope)
+    scope["path"] = "/"
+    messages: list[dict] = []
+
+    async def _send(message: dict) -> None:
+        messages.append(message)
+
+    await mcp_dispatcher(scope, request.receive, _send)
+    start = next(m for m in messages if m["type"] == "http.response.start")
+    body = b"".join(
+        m.get("body", b"") for m in messages if m["type"] == "http.response.body"
+    )
+    headers = {k.decode(): v.decode() for k, v in start.get("headers", [])}
+    return Response(content=body, status_code=start["status"], headers=headers)
+
+
+app.router.routes.append(
+    _StarletteRoute("/mcp", endpoint=_mcp_forward,
+                    methods=["POST", "GET", "DELETE", "OPTIONS"])
+)
+app.mount("/mcp", mcp_dispatcher)
 
 app.add_middleware(
     CORSMiddleware,
@@ -500,6 +536,62 @@ async def list_transactions(
         total = await repo.count_for_agent(agent.id)
         items = [_tx_to_response(tx) for tx in txs]
     return TransactionListResponse(transactions=items, total=total)
+
+
+# ── API-ключи для MCP (S6-04) ────────────────────────────────────────
+
+@app.post("/api/v1/api-keys", response_model=ApiKeyCreated, status_code=201)
+async def create_api_key(
+    body: ApiKeyCreate,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    scopes = list(dict.fromkeys(body.scopes))
+    if not scopes or any(s not in ALLOWED_SCOPES for s in scopes):
+        raise HTTPException(status_code=422, detail=f"scopes: {list(ALLOWED_SCOPES)}")
+    plain, key_hash, prefix = generate_api_key()
+    async with session_scope() as session:
+        key = await ApiKeyRepository(session).create(
+            uuid.UUID(current_user["id"]), body.name[:64], prefix, key_hash, scopes
+        )
+        return ApiKeyCreated(
+            id=str(key.id), name=key.name, prefix=key.prefix, scopes=scopes,
+            created_at=key.created_at, key=plain,
+        )
+
+
+@app.get("/api/v1/api-keys", response_model=list[ApiKeyInfo])
+async def list_api_keys(current_user: Annotated[dict, Depends(get_current_user)]):
+    async with session_scope() as session:
+        keys = await ApiKeyRepository(session).list_by_owner(uuid.UUID(current_user["id"]))
+        return [
+            ApiKeyInfo(
+                id=str(k.id), name=k.name, prefix=k.prefix,
+                scopes=(k.scopes or {}).get("list", []), created_at=k.created_at,
+                last_used_at=k.last_used_at, revoked=k.revoked_at is not None,
+            )
+            for k in keys
+        ]
+
+
+@app.delete("/api/v1/api-keys/{key_id}", response_model=ApiKeyInfo)
+async def revoke_api_key(
+    key_id: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    async with session_scope() as session:
+        repo = ApiKeyRepository(session)
+        try:
+            key = await repo.get(uuid.UUID(key_id))
+        except ValueError:
+            key = None
+        if key is None or key.user_id != uuid.UUID(current_user["id"]):
+            raise HTTPException(status_code=404, detail="API key not found")
+        await repo.revoke(key)
+        return ApiKeyInfo(
+            id=str(key.id), name=key.name, prefix=key.prefix,
+            scopes=(key.scopes or {}).get("list", []), created_at=key.created_at,
+            last_used_at=key.last_used_at, revoked=True,
+        )
 
 
 # ── Reports / export (S4-07) ───────────────────────────────────────────
