@@ -16,11 +16,16 @@ module.exports = {
     hardhat: {
       chainId: 31337,
     },
-    // Uncomment and configure for testnet deployments:
-    // sepolia: {
-    //   url: process.env.SEPOLIA_RPC_URL || "",
-    //   accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-    // },
+    sepolia: {
+      url: process.env.SEPOLIA_RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com",
+      accounts: (
+        process.env.SEPOLIA_PRIVATE_KEY ||
+        process.env.WALLET_METAMASK_ETH_ERC20_PRIVATE_KEY
+      )
+        ? [process.env.SEPOLIA_PRIVATE_KEY || process.env.WALLET_METAMASK_ETH_ERC20_PRIVATE_KEY]
+        : [],
+      timeout: 120000,
+    },
     // baseSepolia: {
     //   url: process.env.BASE_SEPOLIA_RPC_URL || "",
     //   accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
