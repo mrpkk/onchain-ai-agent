@@ -57,6 +57,7 @@
 | GET/POST | `/api/v1/ricardian/*` | Ricardian 2-of-3: соглашения, подписи, вехи, споры (Sepolia) |
 | GET/POST | `/api/v1/agents/{id}/registry` | ERC-8004-паспорт: регистрация/верификация/репутация + бейджи |
 | GET | `/api/v1/registry/agents/{id}/metadata` | Публичный паспорт агента (metadataURI, без auth) |
+| GET/POST | `/api/v1/escrow/*` | Аренда агентов: эскроу-оплата, release/refund/dispute/resolve (Sepolia) |
 | GET | `/api/v1/health` · `/health` · `/health/deep` | Честные проверки компонентов |
 | WS | `/ws?token=<access>` | Live-события |
 | GET | `/docs` · `/openapi.json` | OpenAPI/Swagger |
@@ -96,7 +97,7 @@ DEBUG=true .venv/bin/uvicorn src.api.main:app --port 8000   # из backend/
 ## 🧪 Тесты
 
 ```bash
-# Backend: 259 тестов + coverage-гейт 80%
+# Backend: 268 тестов + coverage-гейт 80%
 backend/.venv/bin/python -m pytest backend/tests -q --cov=src --cov-fail-under=80
 
 # Контракты: 56 тестов (hardhat)

@@ -17,6 +17,7 @@ function onLangChanged() {
     if (SELECTED) { refreshFeed(); refreshPending(); refreshAudit(); refreshReport(); }
     refreshApprovals();
     refreshRicardian();
+    refreshEscrow();
   }
 }
 
@@ -136,6 +137,7 @@ function showDashboard() {
   loadAgents();
   refreshApprovals();
   refreshRicardian();
+  refreshEscrow();
   connectWS();
 }
 
@@ -959,6 +961,109 @@ async function registryAction(agentId, action, method) {
     toast(t("ric.tx_ok") + " " + res.tx_hash.slice(0, 12) + "…", "success");
     loadAgents();
     openRegistry(agentId);
+  } else {
+    toast((res && res.detail) || t("ric.error"), "error");
+  }
+}
+
+
+/* ── Аренда агентов / Escrow (S6-02) ──────────────────────────────── */
+async function refreshEscrow() {
+  const list = document.getElementById("escrow-list");
+  if (!list) return;
+  const wallet = document.getElementById("escrow-wallet");
+  const info = await api("/api/v1/escrow/wallet");
+  if (wallet && info && !info.error) {
+    wallet.textContent = t("ric.signer") + ": " + (info.signer || t("ric.no_signer")) +
+      " · mUSDC: " + (info.token_balance !== null && info.token_balance !== undefined
+        ? info.token_balance.toFixed(4) : "—");
+  }
+  const select = document.getElementById("escrow-agent");
+  if (select) {
+    const current = select.value;
+    select.replaceChildren();
+    AGENTS.forEach((a) => {
+      const option = document.createElement("option");
+      option.value = a.id;
+      option.textContent = a.name + (a.wallet_address ? "" : " (" + t("escrow.no_wallet") + ")");
+      option.disabled = !a.wallet_address;
+      select.appendChild(option);
+    });
+    if (current) select.value = current;
+  }
+  const data = await api("/api/v1/escrow");
+  list.replaceChildren();
+  if (!data || data.error || !data.escrows) {
+    list.appendChild(el("div", "empty", (data && data.detail) || t("ric.error")));
+    return;
+  }
+  if (!data.escrows.length) {
+    list.appendChild(el("div", "empty", t("escrow.empty")));
+    return;
+  }
+  data.escrows.forEach((e) => list.appendChild(escrowCard(e)));
+}
+
+function escrowCard(e) {
+  const card = el("div", "decision-card");
+  const head = el("div", "decision-head");
+  head.appendChild(el("span", "badge", "#" + e.id + " · " + t("escrow.status." + e.status)));
+  head.appendChild(el("span", "muted", (e.amount_wei / 1e18).toFixed(4) + " mUSDC"));
+  card.appendChild(head);
+  const meta = el("div", "muted");
+  meta.style.fontSize = ".74rem";
+  meta.textContent = "payer " + e.payer.slice(0, 10) + "… → payee " + e.payee.slice(0, 10) + "…";
+  card.appendChild(meta);
+  const actions = el("div", "intent-actions");
+  if (e.status === "locked") {
+    const release = el("button", "btn small", t("escrow.release"));
+    release.onclick = () => escrowAction(e.id, "release");
+    const refund = el("button", "btn small ghost", t("escrow.refund"));
+    refund.onclick = () => escrowAction(e.id, "refund");
+    const dispute = el("button", "btn small ghost", t("escrow.dispute"));
+    dispute.onclick = () => escrowAction(e.id, "dispute");
+    actions.append(release, refund, dispute);
+  }
+  if (e.status === "disputed") {
+    const toPayee = el("button", "btn small", t("escrow.resolve_payee"));
+    toPayee.onclick = () => escrowAction(e.id, "resolve", { release_to_payee: true });
+    const toPayer = el("button", "btn small ghost", t("escrow.resolve_payer"));
+    toPayer.onclick = () => escrowAction(e.id, "resolve", { release_to_payee: false });
+    actions.append(toPayee, toPayer);
+  }
+  card.appendChild(actions);
+  return card;
+}
+
+async function escrowAction(id, action, body) {
+  const res = await api("/api/v1/escrow/" + id + "/" + action, { method: "POST", body: body });
+  if (res && res.tx_hash) {
+    toast(t("ric.tx_ok") + " " + res.tx_hash.slice(0, 12) + "…", "success");
+    refreshEscrow();
+  } else {
+    toast((res && res.detail) || t("ric.error"), "error");
+  }
+}
+
+async function createEscrow() {
+  const select = document.getElementById("escrow-agent");
+  const amount = (document.getElementById("escrow-amount").value || "").trim();
+  const agentId = select && select.value ? select.value : null;
+  if (!agentId) {
+    toast(t("escrow.pick_agent"), "error");
+    return;
+  }
+  if (!/^\d+$/.test(amount)) {
+    toast(t("escrow.amount_ph"), "error");
+    return;
+  }
+  const res = await api("/api/v1/escrow", {
+    method: "POST",
+    body: { agent_id: agentId, amount_wei: amount },
+  });
+  if (res && res.tx_hash) {
+    toast(t("escrow.created") + " #" + res.escrow_id, "success");
+    refreshEscrow();
   } else {
     toast((res && res.detail) || t("ric.error"), "error");
   }

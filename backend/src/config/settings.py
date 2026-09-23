@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     ethereum_rpc_url: str = "https://ethereum-rpc.publicnode.com"  # проверен из РФ 2026-09-22 (306ms); запас: eth.drpc.org, 1rpc.io/eth
     ricardian_rpc_url: str = "https://ethereum-sepolia-rpc.publicnode.com"
     registry_rpc_url: str = "https://ethereum-sepolia-rpc.publicnode.com"
+    escrow_rpc_url: str = "https://ethereum-sepolia-rpc.publicnode.com"
+    escrow_contract_address: str = "0xB73c9F99d40116501C0a18c4019Ac8E91ED7dE8a"  # Sepolia (S5-03)
+    escrow_token_address: str = "0x212774d426519437d5Eb1126fE382fC7b7cCe7B0"  # mUSDC (Sepolia)
     registry_contract_address: str = "0x773945A9eA400e9c8704a2c02AAAbF449cFc20E5"  # Sepolia (S5-03)
     public_base_url: str = "http://127.0.0.1:8090"  # для metadataURI паспорта
     ricardian_contract_address: str = "0x153010a3f18cf363A87364BB8182Fc13ABF95dF2"  # Sepolia (S5-03)

@@ -103,7 +103,8 @@ def test_dashboard_ids_present(client):
                        "onb-step-1", "onb-step-3", "report-summary",
                        "approvals-list", "approvals-count", "policy-input",
                        "policy-preview", "ric-wallet", "ric-parties", "ric-token", "ric-milestones", "ric-list",
-                       "registry-panel", "registry-body"):
+                       "registry-panel", "registry-body", "escrow-wallet", "escrow-agent",
+                       "escrow-amount", "escrow-list"):
         assert f'id="{element_id}"' in body, element_id
 
 

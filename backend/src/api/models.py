@@ -325,3 +325,16 @@ class RicardianCreateRequest(BaseModel):
 
 class RicardianExecuteRequest(BaseModel):
     payee: str
+
+
+# ── Escrow-аренда (S6-02) ────────────────────────────────────────────
+
+class EscrowCreateRequest(BaseModel):
+    payee: str = ""
+    amount_wei: str
+    token: Optional[str] = None
+    agent_id: Optional[str] = None  # если задан — payee = кошелёк агента (аренда агента)
+
+
+class EscrowResolveRequest(BaseModel):
+    release_to_payee: bool

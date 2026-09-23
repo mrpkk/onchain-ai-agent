@@ -48,6 +48,8 @@ from .models import (
     PolicySimulateResponse,
     PolicyValidateRequest,
     PolicyValidateResponse,
+    EscrowCreateRequest,
+    EscrowResolveRequest,
     RefreshRequest,
     RicardianCreateRequest,
     RicardianExecuteRequest,
@@ -73,6 +75,7 @@ from ..runtime.policy_simulator import simulate_policy_change
 from ..runtime.reports import build_summary, decisions_csv, transactions_csv
 from ..runtime import manager as runtime_manager
 from ..integrations.agent_registry import AgentRegistryError, AgentRegistryService
+from ..integrations.escrow import EscrowError, EscrowService
 from ..integrations.ricardian import RicardianError, RicardianService
 from ..runtime.badges import compute_badges
 from ..security.apikeys import ALLOWED_SCOPES, generate_api_key
@@ -841,6 +844,125 @@ async def registry_public_metadata(agent_id: str):
             },
             "note": "Публичный паспорт KARTA: без решений, аудита и политик",
         }
+
+
+# ── Escrow-аренда агентов (S6-02) ────────────────────────────────────
+
+@app.get("/api/v1/escrow/wallet")
+async def escrow_wallet(current_user: Annotated[dict, Depends(get_current_user)]):
+    service = EscrowService()
+    return {
+        "signer": service.signer_address,
+        "contract": service.contract_address,
+        "token": service.token_address,
+        "token_balance": await service.token_balance(),
+        "chain": "sepolia",
+        "ready": service.signer_address is not None,
+    }
+
+
+@app.get("/api/v1/escrow")
+async def escrow_list(
+    current_user: Annotated[dict, Depends(get_current_user)],
+    limit: int = 20,
+):
+    service = EscrowService()
+    try:
+        escrows = await service.list_recent(limit=max(1, min(limit, 50)))
+    except EscrowError as e:
+        raise _chain_http_error(e) from e
+    return {"escrows": escrows, "total": len(escrows)}
+
+
+@app.get("/api/v1/escrow/{escrow_id}")
+async def escrow_detail(
+    escrow_id: int,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    service = EscrowService()
+    try:
+        return await service.get_escrow(int(escrow_id))
+    except EscrowError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.post("/api/v1/escrow", status_code=201)
+async def escrow_create(
+    body: EscrowCreateRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    payee = body.payee.strip()
+    if body.agent_id:
+        async with session_scope() as session:
+            agent = await _get_owned_agent(session, body.agent_id, current_user)
+            if not agent.wallet_address:
+                raise HTTPException(
+                    status_code=409,
+                    detail="У агента не задан wallet_address — аренда невозможна",
+                )
+            payee = agent.wallet_address
+    if not payee:
+        raise HTTPException(status_code=422, detail="payee или agent_id обязателен")
+    try:
+        amount = int(body.amount_wei)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="amount_wei должен быть целым (wei)") from None
+    if amount <= 0:
+        raise HTTPException(status_code=422, detail="amount_wei должен быть > 0")
+    service = EscrowService()
+    try:
+        return await service.create_rental(payee, amount, token_address=body.token)
+    except EscrowError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.post("/api/v1/escrow/{escrow_id}/release")
+async def escrow_release(
+    escrow_id: int,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    service = EscrowService()
+    try:
+        return await service.release(int(escrow_id))
+    except EscrowError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.post("/api/v1/escrow/{escrow_id}/refund")
+async def escrow_refund(
+    escrow_id: int,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    service = EscrowService()
+    try:
+        return await service.refund(int(escrow_id))
+    except EscrowError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.post("/api/v1/escrow/{escrow_id}/dispute")
+async def escrow_dispute(
+    escrow_id: int,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    service = EscrowService()
+    try:
+        return await service.dispute(int(escrow_id))
+    except EscrowError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.post("/api/v1/escrow/{escrow_id}/resolve")
+async def escrow_resolve(
+    escrow_id: int,
+    body: EscrowResolveRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    service = EscrowService()
+    try:
+        return await service.resolve(int(escrow_id), body.release_to_payee)
+    except EscrowError as e:
+        raise _chain_http_error(e) from e
 
 
 # ── Reports / export (S4-07) ───────────────────────────────────────────

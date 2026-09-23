@@ -131,6 +131,20 @@
         <button class="btn small ghost" onclick="downloadCsv('audit')" data-i18n="btn.csv_audit">CSV аудит</button>
       </div>
     </section>
+    <section class="panel wide">
+      <div class="panel-head">
+        <h3 data-i18n="panel.escrow">Аренда агентов (Escrow)</h3>
+        <button class="btn ghost small" onclick="refreshEscrow()" data-i18n="btn.refresh">Обновить</button>
+      </div>
+      <div class="muted" id="escrow-wallet" style="font-size:.74rem"></div>
+      <div class="chat-row" style="margin:8px 0">
+        <select id="escrow-agent"></select>
+        <input id="escrow-amount" data-i18n-placeholder="escrow.amount_ph">
+        <button class="btn primary small" onclick="createEscrow()" data-i18n="escrow.create">Арендовать</button>
+      </div>
+      <div id="escrow-list" class="feed"><div class="empty">—</div></div>
+    </section>
+
     <section class="panel wide" id="registry-panel" style="display:none">
       <div class="panel-head">
         <h3 data-i18n="panel.registry">Паспорт агента (ERC-8004)</h3>
