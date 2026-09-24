@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 
+from .chains import CHAINS
 from web3 import Web3
 
 logger = logging.getLogger("agent.perception")
@@ -47,36 +48,21 @@ class MempoolTx:
 class BlockchainPerception:
     """Reads and monitors EVM-compatible blockchains."""
 
-    CHAIN_CONFIGS = {
-        "ethereum": {
-            "rpc": "https://eth.llamarpc.com",
-            "chain_id": 1,
-            "explorer": "https://etherscan.io",
-            "native_token": "ETH",
-            "block_time": 12,
-        },
-        "bsc": {
-            "rpc": "https://bsc-dataseed.binance.org",
-            "chain_id": 56,
-            "explorer": "https://bscscan.com",
-            "native_token": "BNB",
-            "block_time": 3,
-        },
-        "polygon": {
-            "rpc": "https://polygon-rpc.com",
-            "chain_id": 137,
-            "explorer": "https://polygonscan.com",
-            "native_token": "MATIC",
-            "block_time": 2,
-        },
-        "sepolia": {
-            "rpc": "https://rpc.sepolia.org",
-            "chain_id": 11155111,
-            "explorer": "https://sepolia.etherscan.io",
-            "native_token": "ETH",
-            "block_time": 12,
-        },
-    }
+    @property
+    def CHAIN_CONFIGS(self):
+        """Реестр сетей (S5-07) в legacy-формате: rpc — первый (fallback — rpcs)."""
+        return {
+            name: {
+                "rpc": cfg.rpcs[0],
+                "rpcs": list(cfg.rpcs),
+                "chain_id": cfg.chain_id,
+                "explorer": cfg.explorer,
+                "native_token": cfg.native_symbol,
+                "block_time": cfg.block_time,
+                "finality_blocks": cfg.finality_blocks,
+            }
+            for name, cfg in CHAINS.items()
+        }
 
     def __init__(self, chains: Optional[list[str]] = None):
         self.chains = chains or ["ethereum"]
@@ -91,16 +77,19 @@ class BlockchainPerception:
             if not config:
                 logger.warning(f"Unknown chain: {chain_name}")
                 continue
-            try:
-                w3 = Web3(Web3.HTTPProvider(config["rpc"]))
-                # web3 v7 auto-detects PoA chains
-                if w3.is_connected():
-                    self.connections[chain_name] = w3
-                    logger.info(f"Connected to {chain_name} (block #{w3.eth.block_number})")
-                else:
-                    logger.error(f"Failed to connect to {chain_name}")
-            except Exception as e:
-                logger.error(f"Connection error for {chain_name}: {e}")
+            connected = False
+            for rpc_url in config.get("rpcs", [config["rpc"]]):
+                try:
+                    w3 = Web3(Web3.HTTPProvider(rpc_url, request_kwargs={"timeout": 8}))
+                    if w3.is_connected():
+                        self.connections[chain_name] = w3
+                        logger.info(f"Connected to {chain_name} via {rpc_url} (block #{w3.eth.block_number})")
+                        connected = True
+                        break
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(f"RPC {rpc_url} для {chain_name} недоступен: {type(e).__name__}")
+            if not connected:
+                logger.error(f"Failed to connect to {chain_name} (все RPC недоступны)")
 
     def get_web3(self, chain: str) -> Optional[Web3]:
         return self.connections.get(chain)

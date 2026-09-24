@@ -968,6 +968,21 @@ async def escrow_resolve(
         raise _chain_http_error(e) from e
 
 
+# ── Сети / multi-chain (S5-07) ──────────────────────────────────────
+
+@app.get("/api/v1/chains")
+async def list_chains(current_user: Annotated[dict, Depends(get_current_user)]):
+    from ..agent.chains import CHAINS, shared_health
+
+    cache = shared_health()
+    healths = await asyncio.gather(*(cache.probe_async(name) for name in CHAINS))
+    chains = [
+        {**cfg.to_dict(), "health": health.to_dict()}
+        for cfg, health in zip(CHAINS.values(), healths)
+    ]
+    return {"chains": chains, "total": len(chains)}
+
+
 # ── x402-демо (S6-05) ───────────────────────────────────────────────
 
 @app.get("/api/v1/x402/demo/premium")

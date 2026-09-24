@@ -59,6 +59,7 @@
 | GET | `/api/v1/registry/agents/{id}/metadata` | Публичный паспорт агента (metadataURI, без auth) |
 | GET/POST | `/api/v1/escrow/*` | Аренда агентов: эскроу-оплата, release/refund/dispute/resolve (Sepolia) |
 | GET | `/api/v1/x402/demo/premium` | x402-демо: 402 → EIP-3009-подпись → сеттлмент (Sepolia, токен без ценности) |
+| GET | `/api/v1/chains` | Multi-chain реестр: 6 сетей (ETH/Sepolia/Base/Base Sepolia/BSC/Polygon) + health |
 | GET | `/api/v1/health` · `/health` · `/health/deep` | Честные проверки компонентов |
 | WS | `/ws?token=<access>` | Live-события |
 | GET | `/docs` · `/openapi.json` | OpenAPI/Swagger |
@@ -98,7 +99,7 @@ DEBUG=true .venv/bin/uvicorn src.api.main:app --port 8000   # из backend/
 ## 🧪 Тесты
 
 ```bash
-# Backend: 291 тест + coverage-гейт 80%
+# Backend: 298 тестов + coverage-гейт 80%
 backend/.venv/bin/python -m pytest backend/tests -q --cov=src --cov-fail-under=80
 
 # Контракты: 56 тестов (hardhat)
