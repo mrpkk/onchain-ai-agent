@@ -17,6 +17,7 @@ from web3 import Web3
 from .perception import BlockchainPerception, PriceOracle
 from .reasoning import LLMReasoner, RiskAssessor, AgentDecision
 from .planning import AgentPlanner, Plan, PlanStatus, StepType
+from .gas_oracle import shared_oracle
 from .execution import (
     WalletManager, TransactionExecutor, SpendingLimit,
     TransactionResult, TxStatus,
@@ -170,6 +171,11 @@ class OnChainAgent:
         if self.executor is None:
             w3 = self.perception.get_web3(self.config.chain)
             if w3:
+                gas_cap_gwei = 0
+                try:
+                    gas_cap_gwei = int(getattr(self.policy.model.limits, "gas_gwei_cap", 0) or 0)
+                except Exception:  # noqa: BLE001 — политика не должна ломать сборку
+                    pass
                 self.executor = TransactionExecutor(
                     wallet=self.wallet,
                     w3=w3,
@@ -177,6 +183,7 @@ class OnChainAgent:
                         daily_limit=self.config.daily_limit,
                         per_tx_limit=self.config.per_tx_limit,
                     ),
+                    gas_cap_gwei=gas_cap_gwei,
                 )
         return self.wallet
 
@@ -190,8 +197,13 @@ class OnChainAgent:
             return None
         gas_price = 0.0
         try:
-            gas_price = float(self.perception.get_gas_price(self.config.chain) or 0.0)
-        except Exception as e:
+            w3 = self.perception.get_web3(self.config.chain)
+            if w3 is not None:
+                # S5-04: кап сверяем по реальной EIP-1559-оценке (maxFeePerGas), не по legacy
+                gas_price = float(shared_oracle().recommend(w3).max_fee_gwei)
+            else:
+                gas_price = float(self.perception.get_gas_price(self.config.chain) or 0.0)
+        except Exception as e:  # noqa: BLE001
             logger.warning("Dharma: gas price недоступен (%s) — газ-кап пропущен", e)
         ctx = TxContext(
             action=action,

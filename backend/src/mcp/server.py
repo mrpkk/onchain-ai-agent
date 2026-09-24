@@ -24,6 +24,7 @@ from typing import Any, Optional
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 
+from ..agent.gas_oracle import shared_oracle
 from ..config.settings import get_settings
 from ..db import (
     AgentRepository,
@@ -188,7 +189,7 @@ async def tool_get_balance(agent_id: str, ctx: Context) -> str:
     )
 
 
-@mcp.tool(name="get_gas", description="Текущая цена газа сети агента (EIP-1559 base/priority) из RPC.")
+@mcp.tool(name="get_gas", description="EIP-1559-рекомендация газа сети агента (base/priority/max) из RPC.")
 async def tool_get_gas(agent_id: str, ctx: Context) -> str:
     owner, error = await _auth(ctx)
     if error:
@@ -201,30 +202,10 @@ async def tool_get_gas(agent_id: str, ctx: Context) -> str:
     rpc_url = CHAIN_RPC.get(chain_id)
     if rpc_url is None:
         return _err("CHAIN_UNSUPPORTED", f"Сеть {chain_id} не подключена (v1: 1, 11155111)")
-    result, rpc_error = await _rpc_call(
-        rpc_url,
-        lambda w3: {
-            "block": int(w3.eth.block_number),
-            "base_fee": int(getattr(w3.eth.get_block("latest"), "baseFeePerGas", 0) or 0),
-            "gas_price": int(w3.eth.gas_price),
-        },
-    )
+    result, rpc_error = await _rpc_call(rpc_url, lambda w3: shared_oracle().recommend(w3).to_dict())
     if rpc_error:
         return _err("RPC_UNAVAILABLE", f"RPC недоступен: {rpc_error}")
-    base, gp = result["base_fee"], result["gas_price"]
-    priority = max(gp - base, 0)
-    gwei = 1e9
-    return _ok(
-        {
-            "chain_id": chain_id,
-            "base_fee_gwei": round(base / gwei, 3),
-            "priority_fee_gwei": round(priority / gwei, 3),
-            "gas_price_gwei": round(gp / gwei, 3),
-            "block_number": result["block"],
-        },
-        "rpc:ethereum",
-        block=result["block"],
-    )
+    return _ok(result, "rpc:ethereum", block=result.get("block_number"))
 
 
 @mcp.tool(name="get_portfolio", description="Честная v1-сводка: нативный баланс + сеть; токены — Phase 5.")
