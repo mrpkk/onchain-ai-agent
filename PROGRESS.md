@@ -34,9 +34,9 @@
 
 ## 🧭 ТЕКУЩИЙ ШАГ (обновлять при каждом слайсе)
 
-**Статус:** **P0–P4 закрыты полностью** (P4 = 10/10 после S4-09; сверх плана закрыты S4-15 SAST/dep-audit, S4-16 docs-пакет, S4-17 ops-реконсиляция). **v2.0-alpha в main** (тег, merge `4b8b7d3`). Тесты: **291 backend + 61 контрактных** (вкл. coverage-гейт 80%, bandit medium+ = 0, pip-audit = 0). Live E2E: `scripts/e2e_live.py` 13/13.
+**Статус:** **P0–P4 закрыты полностью** (P4 = 10/10 после S4-09; сверх плана закрыты S4-15 SAST/dep-audit, S4-16 docs-пакет, S4-17 ops-реконсиляция). **v2.0-alpha в main** (тег, merge `4b8b7d3`). Тесты: **298 backend + 61 контрактных** (вкл. coverage-гейт 80%, bandit medium+ = 0, pip-audit = 0). Live E2E: `scripts/e2e_live.py` 13/13.
 **Инфраструктура P5 (22.09):** **RPC ✅ работает из РФ** — `ethereum-rpc.publicnode.com` (306ms, дефолт в settings), запас `eth.drpc.org`, `1rpc.io/eth`; health показывает `rpc: ok` (реальный блок mainnet). **Foundry ✅** установлен (forge/cast/anvil 1.8.1, up to date). **4337 — локальный EntryPoint** (решение владельца). **Sepolia-деплой** — ждёт решения владельца («зачем?» — объяснение в отчёте 22.09; вопрос «деплоим сейчас/после P5»).
-**P6 ЗАКРЫТ 5/5 (23.09):** S6-04 ✅ MCP · S6-03 ✅ Ricardian · S6-01 ✅ ERC-8004 · S6-02 ✅ Escrow · **S6-05 ✅ x402-демо (тестнет)**; реальный приём x402 (INTL) остаётся STOP-GATE. **P5:** S5-03 ✅ (Sepolia) · S5-04 ✅ (EIP-1559 + газ-оракул) · **S5-05 ✅ (private RPC + jitter)**; дальше S5-07 multi-chain / S5-01 swap / S5-02 bridge / S5-06 ERC-4337 — по команде.
+**P6 ЗАКРЫТ 5/5 (23.09):** S6-04 ✅ MCP · S6-03 ✅ Ricardian · S6-01 ✅ ERC-8004 · S6-02 ✅ Escrow · **S6-05 ✅ x402-демо (тестнет)**; реальный приём x402 (INTL) остаётся STOP-GATE. **P5:** S5-03 ✅ · S5-04 ✅ · S5-05 ✅ · **S5-07 ✅ (multi-chain, 6 сетей + Base)**; дальше S5-01 swap / S5-02 bridge / S5-06 ERC-4337 — по команде.
 **STOP-GATE (ранее 6) — ЗАКРЫТЫ все:** execution-граница = тиры 0–1 симуляция (реальное — P5); PG docker ✅; DeepSeek-ключ ✅; `backend/.env` выведен из контура ✅; фронтенд A ✅; футуристики — в P7 (по решению).
 
 ---
@@ -143,7 +143,7 @@
 - [x] S5-04 EIP-1559 + газ-оракул: `agent/gas_oracle.py` — base fee (latest block) + priority (`eth_maxPriorityFeePerGas`, fallback gasPrice−base, floor 1 gwei) → **maxFeePerGas = base×2 + priority** (буфер ~6 блоков), TTL-кэш 15с, честный legacy-fallback (`gasPrice`) и `RPC_UNAVAILABLE`; `ensure_within_cap()` — рекомендация выше `limits.gas_gwei_cap` = HOLD (не «подкрутить»). **Karma Engine:** `TransactionExecutor` переведён на type-2 (`maxFeePerGas`/`maxPriorityFeePerGas`, кап из политики в конструкторе; отказ `GAS_CAP_EXCEEDED` до отправки); core сверяет Dharma-кап по **реальной** EIP-1559-оценке (`shared_oracle`), а не legacy. MCP `get_gas` — на общем оракуле. **Live:** mainnet base 0.06 → max 1.12 gwei (block 26044227); Sepolia base 0.953 → max 2.907 gwei. 9 тестов. Коммит `b53fe86`.
 - [x] S5-05 Private RPC + jitter: релеи **проверены из РФ живьём** (flashbots 884ms, mevblocker 592ms — реальные блоки). `TransactionExecutor`: `private_w3` — отправка через private RPC **только на mainnet** (chain_id 1), честный fallback на публичный при ошибке (`submit_via: private|public` в результате); **jitter** — случайная задержка 0–`tx_jitter_max_seconds` (default 1.5с, 0=выкл) перед отправкой (анти-паттерн-детект); executor в core вызывается через `asyncio.to_thread` (не блокирует event loop на сети/jitter). Конфиг: `PRIVATE_RPC_ENABLED` + `private_rpc_urls`; health-компонент `private_rpc` (disabled вне агрегата, enabled → реальный probe). **Live:** karta-dev с `PRIVATE_RPC_ENABLED=true` → health `private_rpc: ok` (Flashbots, block 26045621). 6 тестов. Коммит `e1c5f8a`.
 - [ ] S5-06 ERC-4337: smart account + session keys (TTL, revoke) + paymaster + social recovery
-- [ ] S5-07 Multi-chain adapter (сеть = config {rpc[], explorer, finality, health})
+- [x] S5-07 Multi-chain adapter: `agent/chains.py` — реестр сетей (сеть = config: **rpcs[] с fallback, explorer, finality_blocks-эвристика, native_symbol, block_time, eip1559**): ethereum/sepolia/**base/base_sepolia**/bsc/polygon; RPC-списки **проверены из РФ живьём** (PublicNode/DRPC/1RPC/Base.org; мёртвые llamarpc/polygon-rpc.com/сеполя.org исключены). `ChainHealthCache` — probe по порядку с fallback, TTL 60с. API `GET /api/v1/chains` (6 сетей + live health). **Perception переведён на реестр** (чинил реальный баг: дефолтный eth.llamarpc.com из РФ не работал). **Live:** все 6 сетей ok, 209–245ms, реальные блоки (ETH 26048185, Base 51737043, BSC 123780359, Polygon 94372196). 7 тестов. Коммит `a2bdcd0`.
 
 ### P6 — Агент-экономика (по решению)
 
@@ -210,6 +210,7 @@ F1 Gasless ERC-4337 · F2 Digital twin · F3 Copilot · F4 Intent-engine · F5 �
 | 32 | 2026-09-23 | **S6-05 x402 ДЕМО**: EIP-3009-токен+тесты, сервис+API+клиент, live Sepolia сеттлмент | `4b52d17` | 276/276 + 61 контрактных + live | replay-защита; реальный приём — STOP-GATE |
 | 33 | 2026-09-24 | **S5-04 EIP-1559 + газ-оракул**: type-2 в Karma Engine, кап политики, MCP get_gas, live-замеры | `b53fe86` | 285/285 | mainnet max 1.12 gwei; кап = HOLD |
 | 34 | 2026-09-24 | **S5-05 Private RPC + jitter**: mainnet-only private submit + fallback, jitter, health-компонент | `e1c5f8a` | 291/291 + live | Flashbots/MEV Blocker доступны из РФ |
+| 35 | 2026-09-24 | **S5-07 Multi-chain**: реестр 6 сетей (+Base), RPC-fallback, health-кэш, API /chains, perception на реестре | `a2bdcd0` | 298/298 + live | все 6 сетей ok из РФ; фикс мёртвых RPC |
 
 ## 💡 ИДЕИ НА ОБСУЖДЕНИЕ (новое — предлагать после отчётов)
 
