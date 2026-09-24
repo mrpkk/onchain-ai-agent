@@ -145,6 +145,60 @@
       <div id="escrow-list" class="feed"><div class="empty">—</div></div>
     </section>
 
+    <section class="panel wide">
+      <div class="panel-head">
+        <h3 data-i18n="panel.swap">Swap (Uniswap-V2, тестнет)</h3>
+        <button class="btn ghost small" onclick="refreshSwap()" data-i18n="btn.refresh">Обновить</button>
+      </div>
+      <div class="muted" id="swap-info" style="font-size:.74rem"></div>
+      <div class="chat-row" style="margin:8px 0">
+        <input id="swap-amount" data-i18n-placeholder="swap.amount_ph">
+        <input id="swap-slippage" value="50" style="max-width:90px">
+        <button class="btn small ghost" onclick="quoteSwap()" data-i18n="swap.quote">Котировка</button>
+        <button class="btn primary small" onclick="executeSwap()" data-i18n="swap.execute">Swap</button>
+      </div>
+      <div id="swap-quote" class="chat-preview"></div>
+    </section>
+
+    <section class="panel wide">
+      <div class="panel-head">
+        <h3 data-i18n="panel.bridge">Bridge (LI.FI)</h3>
+        <button class="btn ghost small" onclick="refreshBridge()" data-i18n="btn.refresh">Обновить</button>
+      </div>
+      <div class="muted" id="bridge-info" style="font-size:.74rem"></div>
+      <div class="chat-row" style="margin:8px 0">
+        <input id="bridge-from" value="1" style="max-width:80px" title="from chain">
+        <input id="bridge-to" value="8453" style="max-width:80px" title="to chain">
+        <input id="bridge-amount" data-i18n-placeholder="bridge.amount_ph">
+        <button class="btn small ghost" onclick="quoteBridge()" data-i18n="bridge.quote">Котировка</button>
+        <button class="btn primary small" onclick="executeBridge()" data-i18n="bridge.execute">Bridge</button>
+      </div>
+      <div id="bridge-quote" class="chat-preview"></div>
+    </section>
+
+    <section class="panel wide">
+      <div class="panel-head">
+        <h3 data-i18n="panel.aa">Smart Account (ERC-4337)</h3>
+        <button class="btn ghost small" onclick="refreshAA()" data-i18n="btn.refresh">Обновить</button>
+      </div>
+      <div class="muted" id="aa-info" style="font-size:.74rem"></div>
+      <div class="chat-row" style="margin:8px 0">
+        <input id="aa-session-key" data-i18n-placeholder="aa.key_ph">
+        <input id="aa-limit" data-i18n-placeholder="aa.limit_ph" style="max-width:150px">
+        <button class="btn small ghost" onclick="aaAddKey()" data-i18n="aa.add_key">Добавить session key</button>
+        <button class="btn small ghost" onclick="aaRevokeKey()" data-i18n="aa.revoke_key">Отозвать</button>
+      </div>
+      <div class="chat-row" style="margin:0 0 8px">
+        <input id="aa-target" data-i18n-placeholder="aa.target_ph">
+        <input id="aa-value" data-i18n-placeholder="aa.value_ph" style="max-width:130px">
+        <label class="muted" style="font-size:.74rem;display:flex;align-items:center;gap:4px">
+          <input type="checkbox" id="aa-use-session" checked style="width:auto"> <span data-i18n="aa.use_session">через session key</span>
+        </label>
+        <button class="btn primary small" onclick="aaExecute()" data-i18n="aa.execute">UserOp</button>
+      </div>
+      <div id="aa-result" class="chat-preview"></div>
+    </section>
+
     <section class="panel wide" id="registry-panel" style="display:none">
       <div class="panel-head">
         <h3 data-i18n="panel.registry">Паспорт агента (ERC-8004)</h3>

@@ -18,6 +18,9 @@ function onLangChanged() {
     refreshApprovals();
     refreshRicardian();
     refreshEscrow();
+    refreshSwap();
+    refreshBridge();
+    refreshAA();
   }
 }
 
@@ -138,6 +141,9 @@ function showDashboard() {
   refreshApprovals();
   refreshRicardian();
   refreshEscrow();
+  refreshSwap();
+  refreshBridge();
+  refreshAA();
   connectWS();
 }
 
@@ -1066,5 +1072,129 @@ async function createEscrow() {
     refreshEscrow();
   } else {
     toast((res && res.detail) || t("ric.error"), "error");
+  }
+}
+
+
+/* ── Swap (S5-01) ─────────────────────────────────────────────────── */
+async function refreshSwap() {
+  const elInfo = document.getElementById("swap-info");
+  if (!elInfo) return;
+  const info = await api("/api/v1/swap/info");
+  if (info && !info.error) {
+    elInfo.textContent = t("swap.router") + ": " + (info.router || "—").slice(0, 10) + "… · mUSDC " +
+      (info.balance_in !== null ? (info.balance_in / 1e18).toFixed(3) : "—") + " · xUSDC " +
+      (info.balance_out !== null ? (info.balance_out / 1e18).toFixed(3) : "—") +
+      " · " + t("swap.reserves") + " " + (info.reserve0 / 1e18).toFixed(2) + "/" + (info.reserve1 / 1e18).toFixed(2);
+  } else {
+    elInfo.textContent = (info && info.detail) || t("ric.error");
+  }
+}
+
+async function quoteSwap() {
+  const amount = (document.getElementById("swap-amount").value || "").trim();
+  const slippage = (document.getElementById("swap-slippage").value || "50").trim();
+  const out = document.getElementById("swap-quote");
+  if (!/^\d+$/.test(amount)) { toast(t("swap.amount_ph"), "error"); return; }
+  const q = await api("/api/v1/swap/quote?amount_in=" + amount + "&slippage_bps=" + slippage);
+  out.textContent = q.error ? (q.detail || t("ric.error"))
+    : t("swap.out") + ": " + (q.amount_out / 1e18).toFixed(6) + " · " + t("swap.min") + ": " +
+      (q.min_amount_out / 1e18).toFixed(6) + " · impact " + q.price_impact_bps + " bps";
+}
+
+async function executeSwap() {
+  const amount = (document.getElementById("swap-amount").value || "").trim();
+  const slippage = parseInt(document.getElementById("swap-slippage").value || "50", 10);
+  if (!/^\d+$/.test(amount)) { toast(t("swap.amount_ph"), "error"); return; }
+  const res = await api("/api/v1/swap/execute", { method: "POST",
+    body: { amount_in: amount, slippage_bps: slippage } });
+  if (res && res.tx_hash) { toast(t("ric.tx_ok") + " " + res.tx_hash.slice(0, 12) + "…", "success"); refreshSwap(); }
+  else toast((res && res.detail) || t("ric.error"), "error");
+}
+
+/* ── Bridge (S5-02) ───────────────────────────────────────────────── */
+async function refreshBridge() {
+  const elInfo = document.getElementById("bridge-info");
+  if (!elInfo) return;
+  const info = await api("/api/v1/bridge/info");
+  if (info && !info.error) {
+    elInfo.textContent = info.provider + " · " + t("bridge.exec") + ": " +
+      (info.execution_enabled ? t("bridge.on") : t("bridge.off_gate"));
+  } else {
+    elInfo.textContent = (info && info.detail) || t("ric.error");
+  }
+}
+
+async function quoteBridge() {
+  const from = (document.getElementById("bridge-from").value || "").trim();
+  const to = (document.getElementById("bridge-to").value || "").trim();
+  const amount = (document.getElementById("bridge-amount").value || "").trim();
+  const out = document.getElementById("bridge-quote");
+  if (!/^\d+$/.test(amount)) { toast(t("bridge.amount_ph"), "error"); return; }
+  const q = await api("/api/v1/bridge/quote?from_chain=" + from + "&to_chain=" + to + "&amount=" + amount);
+  out.textContent = q.error ? (q.detail || t("ric.error"))
+    : q.tool_name + " · → " + (q.to_amount / 1e18).toFixed(6) + " · ~" + q.execution_seconds + "s · fees $" +
+      (q.fee_usd_total || 0).toFixed(4);
+}
+
+async function executeBridge() {
+  const from = (document.getElementById("bridge-from").value || "").trim();
+  const to = (document.getElementById("bridge-to").value || "").trim();
+  const amount = (document.getElementById("bridge-amount").value || "").trim();
+  if (!/^\d+$/.test(amount)) { toast(t("bridge.amount_ph"), "error"); return; }
+  const q = await api("/api/v1/bridge/quote?from_chain=" + from + "&to_chain=" + to + "&amount=" + amount);
+  if (!q || q.error) { toast((q && q.detail) || t("ric.error"), "error"); return; }
+  const res = await api("/api/v1/bridge/execute", { method: "POST", body: { quote: q } });
+  if (res && res.tx_hash) toast(t("ric.tx_ok") + " " + res.tx_hash.slice(0, 12) + "…", "success");
+  else toast((res && res.detail) || t("ric.error"), "error");
+}
+
+/* ── ERC-4337 (S5-06) ─────────────────────────────────────────────── */
+async function refreshAA() {
+  const elInfo = document.getElementById("aa-info");
+  if (!elInfo) return;
+  const info = await api("/api/v1/erc4337/info");
+  if (info && !info.error) {
+    elInfo.textContent = t("aa.account") + ": " + (info.account || "—").slice(0, 12) + "… · nonce " +
+      (info.nonce !== undefined ? info.nonce : "—") + " · session key: " +
+      (info.session_key || "—").slice(0, 12) + "…" +
+      (info.guardians && info.guardians.length ? " · guardians " + info.guardians.length : "");
+  } else {
+    elInfo.textContent = (info && info.detail) || t("ric.error");
+  }
+}
+
+async function aaAddKey() {
+  const key = (document.getElementById("aa-session-key").value || "").trim();
+  const limit = (document.getElementById("aa-limit").value || "0").trim();
+  if (!key) { toast(t("aa.key_ph"), "error"); return; }
+  const res = await api("/api/v1/erc4337/session-keys", { method: "POST",
+    body: { key_address: key, spend_limit_wei: limit, valid_until: 0 } });
+  if (res && res.tx_hash) { toast(t("ric.tx_ok") + " " + res.tx_hash.slice(0, 12) + "…", "success"); refreshAA(); }
+  else toast((res && res.detail) || t("ric.error"), "error");
+}
+
+async function aaRevokeKey() {
+  const key = (document.getElementById("aa-session-key").value || "").trim();
+  if (!key) { toast(t("aa.key_ph"), "error"); return; }
+  const res = await api("/api/v1/erc4337/session-keys/" + key, { method: "DELETE" });
+  if (res && res.tx_hash) { toast(t("ric.tx_ok") + " " + res.tx_hash.slice(0, 12) + "…", "success"); refreshAA(); }
+  else toast((res && res.detail) || t("ric.error"), "error");
+}
+
+async function aaExecute() {
+  const target = (document.getElementById("aa-target").value || "").trim();
+  const value = (document.getElementById("aa-value").value || "0").trim();
+  const useSession = document.getElementById("aa-use-session").checked;
+  const out = document.getElementById("aa-result");
+  if (!target) { toast(t("aa.target_ph"), "error"); return; }
+  const res = await api("/api/v1/erc4337/userop", { method: "POST",
+    body: { target: target, value: value, use_session_key: useSession } });
+  if (res && res.tx_hash) {
+    out.textContent = t("aa.op_ok") + " " + res.tx_hash.slice(0, 14) + "… (" +
+      (res.via_session_key ? "session key" : "owner") + ")";
+    refreshAA();
+  } else {
+    out.textContent = (res && res.detail) || t("ric.error");
   }
 }

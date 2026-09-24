@@ -104,7 +104,10 @@ def test_dashboard_ids_present(client):
                        "approvals-list", "approvals-count", "policy-input",
                        "policy-preview", "ric-wallet", "ric-parties", "ric-token", "ric-milestones", "ric-list",
                        "registry-panel", "registry-body", "escrow-wallet", "escrow-agent",
-                       "escrow-amount", "escrow-list"):
+                       "escrow-amount", "escrow-list", "swap-info", "swap-amount", "swap-slippage",
+                       "swap-quote", "bridge-info", "bridge-from", "bridge-to",
+                       "bridge-amount", "bridge-quote", "aa-info", "aa-session-key",
+                       "aa-limit", "aa-target", "aa-value", "aa-use-session", "aa-result"):
         assert f'id="{element_id}"' in body, element_id
 
 
