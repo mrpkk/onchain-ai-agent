@@ -176,6 +176,19 @@ class OnChainAgent:
                     gas_cap_gwei = int(getattr(self.policy.model.limits, "gas_gwei_cap", 0) or 0)
                 except Exception:  # noqa: BLE001 — политика не должна ломать сборку
                     pass
+                private_w3 = None
+                try:
+                    from ..config.settings import get_settings
+
+                    settings = get_settings()
+                    if settings.private_rpc_enabled and settings.private_rpc_urls:
+                        private_w3 = Web3(Web3.HTTPProvider(
+                            settings.private_rpc_urls[0],
+                            request_kwargs={"timeout": 15.0},
+                        ))
+                    jitter_max = float(settings.tx_jitter_max_seconds or 0.0)
+                except Exception:  # noqa: BLE001 — настройки не должны ломать сборку
+                    jitter_max = 0.0
                 self.executor = TransactionExecutor(
                     wallet=self.wallet,
                     w3=w3,
@@ -184,6 +197,8 @@ class OnChainAgent:
                         per_tx_limit=self.config.per_tx_limit,
                     ),
                     gas_cap_gwei=gas_cap_gwei,
+                    private_w3=private_w3,
+                    jitter_max_seconds=jitter_max,
                 )
         return self.wallet
 
@@ -638,7 +653,8 @@ class OnChainAgent:
                 step.status = PlanStatus.COMPLETED
 
             elif step.step_type == StepType.TRANSFER:
-                result = self.executor.send_eth(
+                result = await asyncio.to_thread(
+                    self.executor.send_eth,
                     to_address=step.params.get("to", ""),
                     amount_eth=step.params.get("amount", 0),
                     chain=step.chain,

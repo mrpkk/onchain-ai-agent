@@ -8,6 +8,7 @@ spending limits, and retry logic.
 import json
 import logging
 import os
+import random
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -51,6 +52,7 @@ class TransactionResult:
     value: float
     gas_used: int
     gas_price_gwei: float
+    submit_via: str = "public"  # public | private
     block_number: Optional[int] = None
     error: Optional[str] = None
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -65,6 +67,7 @@ class TransactionResult:
             "value": self.value,
             "gas_used": self.gas_used,
             "gas_price_gwei": self.gas_price_gwei,
+            "submit_via": self.submit_via,
             "block_number": self.block_number,
             "error": self.error,
             "timestamp": self.timestamp.isoformat(),
@@ -165,10 +168,13 @@ class TransactionExecutor:
     GAS_MULTIPLIER = 1.2  # 20% buffer
 
     def __init__(self, wallet: WalletManager, w3: Web3, spending_limit: SpendingLimit = None,
-                 gas_oracle: GasOracle | None = None, gas_cap_gwei: int = 0):
+                 gas_oracle: GasOracle | None = None, gas_cap_gwei: int = 0,
+                 private_w3: Web3 | None = None, jitter_max_seconds: float = 0.0):
         self.wallet = wallet
         self.gas_oracle = gas_oracle or shared_oracle()
         self.gas_cap_gwei = int(gas_cap_gwei or 0)
+        self.private_w3 = private_w3
+        self.jitter_max_seconds = max(0.0, float(jitter_max_seconds or 0.0))
         self.w3 = w3
         self.spending_limit = spending_limit or SpendingLimit()
         self.tx_log: list[TransactionResult] = []
@@ -373,6 +379,24 @@ class TransactionExecutor:
         """Отзыв allowance: approve(spender, 0)."""
         return self.approve_token(token_address, spender, amount=0.0, chain=chain)
 
+    def _apply_jitter(self) -> None:
+        """Случайная задержка перед отправкой (анти-паттерн-детект). 0 = выключено."""
+        if self.jitter_max_seconds > 0:
+            delay = random.uniform(0.0, self.jitter_max_seconds)
+            logger.debug("TX jitter: %.2fs", delay)
+            time.sleep(delay)
+
+    def _submit_raw(self, raw_tx: bytes) -> tuple[object, str]:
+        """Отправка: private RPC (только mainnet, при наличии) → fallback на публичный."""
+        if self.private_w3 is not None:
+            try:
+                if int(self.w3.eth.chain_id) == 1:
+                    tx_hash = self.private_w3.eth.send_raw_transaction(raw_tx)
+                    return tx_hash, "private"
+            except Exception as e:  # noqa: BLE001 — private упал → честный fallback
+                logger.warning("Private RPC недоступен (%s) — отправка через публичный", type(e).__name__)
+        return self.w3.eth.send_raw_transaction(raw_tx), "public"
+
     def _execute_with_retry(self, tx: dict, value_eth: float,
                             to_address: str, chain: str) -> TransactionResult:
         last_error = None
@@ -380,7 +404,8 @@ class TransactionExecutor:
         for attempt in range(self.MAX_RETRIES):
             try:
                 raw_tx = self.wallet.sign_transaction(self.w3, tx)
-                tx_hash = self.w3.eth.send_raw_transaction(raw_tx)
+                self._apply_jitter()
+                tx_hash, submit_via = self._submit_raw(raw_tx)
                 tx_hash_hex = tx_hash.hex() if isinstance(tx_hash, bytes) else tx_hash
 
                 logger.info(f"TX submitted: {tx_hash_hex} (attempt {attempt + 1})")
@@ -396,6 +421,7 @@ class TransactionExecutor:
                     value=value_eth,
                     gas_used=receipt["gas_used"],
                     gas_price_gwei=float(Web3.from_wei(tx.get("maxFeePerGas") or tx.get("gasPrice", 0), "gwei")),
+                    submit_via=submit_via,
                     block_number=receipt["block_number"],
                     error=None if receipt["status"] == 1 else "Transaction reverted",
                 )

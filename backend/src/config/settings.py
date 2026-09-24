@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     escrow_rpc_url: str = "https://ethereum-sepolia-rpc.publicnode.com"
     escrow_contract_address: str = "0xB73c9F99d40116501C0a18c4019Ac8E91ED7dE8a"  # Sepolia (S5-03)
     escrow_token_address: str = "0x212774d426519437d5Eb1126fE382fC7b7cCe7B0"  # mUSDC (Sepolia)
+    private_rpc_enabled: bool = False  # private RPC только для mainnet-отправок (вкл. конфигом)
+    private_rpc_urls: list[str] = [  # проверены из РФ 2026-09-24: flashbots 884ms, mevblocker 592ms
+        "https://rpc.flashbots.net",
+        "https://rpc.mevblocker.io",
+    ]
+    tx_jitter_max_seconds: float = 1.5  # 0 = выкл; случайная задержка перед отправкой (анти-паттерн-детект)
     x402_rpc_url: str = "https://ethereum-sepolia-rpc.publicnode.com"
     x402_token_address: str = "0x0eB3e17862A108Bbbc91989e6Ca1a3ed16f69710"  # xUSDC demo (Sepolia)
     x402_pay_to: str = ""  # default: адрес кошелька KARTA
