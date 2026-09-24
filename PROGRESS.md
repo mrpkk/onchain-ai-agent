@@ -34,9 +34,9 @@
 
 ## 🧭 ТЕКУЩИЙ ШАГ (обновлять при каждом слайсе)
 
-**Статус:** **P0–P4 закрыты полностью** (P4 = 10/10 после S4-09; сверх плана закрыты S4-15 SAST/dep-audit, S4-16 docs-пакет, S4-17 ops-реконсиляция). **v2.0-alpha в main** (тег, merge `4b8b7d3`). Тесты: **307 backend + 66 контрактных** (вкл. coverage-гейт 80%, bandit medium+ = 0, pip-audit = 0). Live E2E: `scripts/e2e_live.py` 13/13.
+**Статус:** **P0–P4 закрыты полностью** (P4 = 10/10 после S4-09; сверх плана закрыты S4-15 SAST/dep-audit, S4-16 docs-пакет, S4-17 ops-реконсиляция). **v2.0-alpha в main** (тег, merge `4b8b7d3`). Тесты: **318 backend + 66 контрактных** (вкл. coverage-гейт 80%, bandit medium+ = 0, pip-audit = 0). Live E2E: `scripts/e2e_live.py` 13/13.
 **Инфраструктура P5 (22.09):** **RPC ✅ работает из РФ** — `ethereum-rpc.publicnode.com` (306ms, дефолт в settings), запас `eth.drpc.org`, `1rpc.io/eth`; health показывает `rpc: ok` (реальный блок mainnet). **Foundry ✅** установлен (forge/cast/anvil 1.8.1, up to date). **4337 — локальный EntryPoint** (решение владельца). **Sepolia-деплой** — ждёт решения владельца («зачем?» — объяснение в отчёте 22.09; вопрос «деплоим сейчас/после P5»).
-**P6 ЗАКРЫТ 5/5 (23.09):** S6-04 ✅ MCP · S6-03 ✅ Ricardian · S6-01 ✅ ERC-8004 · S6-02 ✅ Escrow · **S6-05 ✅ x402-демо (тестнет)**; реальный приём x402 (INTL) остаётся STOP-GATE. **P5:** S5-03 ✅ · S5-04 ✅ · S5-05 ✅ · S5-07 ✅ · **S5-01 ✅ (swap, MockDEX+slippage-guard)**; дальше S5-02 bridge / S5-06 ERC-4337 — по команде.
+**P6 ЗАКРЫТ 5/5 (23.09):** S6-04 ✅ MCP · S6-03 ✅ Ricardian · S6-01 ✅ ERC-8004 · S6-02 ✅ Escrow · **S6-05 ✅ x402-демо (тестнет)**; реальный приём x402 (INTL) остаётся STOP-GATE. **P5:** S5-03 ✅ · S5-04 ✅ · S5-05 ✅ · S5-07 ✅ · S5-01 ✅ · **S5-02 ✅ (bridge, LI.FI + gated)**; остался **S5-06 ERC-4337** — по команде.
 **STOP-GATE (ранее 6) — ЗАКРЫТЫ все:** execution-граница = тиры 0–1 симуляция (реальное — P5); PG docker ✅; DeepSeek-ключ ✅; `backend/.env` выведен из контура ✅; фронтенд A ✅; футуристики — в P7 (по решению).
 
 ---
@@ -212,6 +212,7 @@ F1 Gasless ERC-4337 · F2 Digital twin · F3 Copilot · F4 Intent-engine · F5 �
 | 34 | 2026-09-24 | **S5-05 Private RPC + jitter**: mainnet-only private submit + fallback, jitter, health-компонент | `e1c5f8a` | 291/291 + live | Flashbots/MEV Blocker доступны из РФ |
 | 35 | 2026-09-24 | **S5-07 Multi-chain**: реестр 6 сетей (+Base), RPC-fallback, health-кэш, API /chains, perception на реестре | `a2bdcd0` | 298/298 + live | все 6 сетей ok из РФ; фикс мёртвых RPC |
 | 36 | 2026-09-24 | **S5-01 Swap**: MockDEX (Uniswap-V2) + slippage-guard + aggregator-адаптер; anvil-цикл; live Sepolia swap | `cb7f62a` | 307/307 + 66 контрактных + live | агрегаторы РФ гео-блокированы (факт) |
+| 37 | 2026-09-24 | **S5-02 Bridge**: LI.FI-котировки/статус (реальные), gated-исполнение, API | `2a7d42b` | 318/318 + live | LI.FI доступен из РФ; AcrossV4 2с |
 
 ## 💡 ИДЕИ НА ОБСУЖДЕНИЕ (новое — предлагать после отчётов)
 
