@@ -214,7 +214,7 @@ F1 Gasless ERC-4337 · F2 Digital twin · F3 Copilot · F4 Intent-engine · F5 �
 | 36 | 2026-09-24 | **S5-01 Swap**: MockDEX (Uniswap-V2) + slippage-guard + aggregator-адаптер; anvil-цикл; live Sepolia swap | `cb7f62a` | 307/307 + 66 контрактных + live | агрегаторы РФ гео-блокированы (факт) |
 | 37 | 2026-09-24 | **S5-02 Bridge**: LI.FI-котировки/статус (реальные), gated-исполнение, API | `2a7d42b` | 318/318 + live | LI.FI доступен из РФ; AcrossV4 2с |
 | 38 | 2026-09-24 | **S5-06 ERC-4337**: локальный EntryPoint + session keys + paymaster + recovery; live Sepolia userOp | `aa41d8e` | 326/326 + 76 контрактных + live | **P5 закрыт 7/7** |
-| 39 | 2026-09-24 | **UX-полировка P5/P6:** панели Swap/Bridge/ERC-4337 в кокпите (котировки/действия/i18n RU-EN) | (этот коммит) | 326/326 | долг swap-UI закрыт |
+| 39 | 2026-09-24 | **UX-полировка P5/P6:** панели Swap/Bridge/ERC-4337 в кокпите (котировки/действия/i18n RU-EN) | `32b1195` | 326/326 | долг swap-UI закрыт |
 
 ## 💡 ИДЕИ НА ОБСУЖДЕНИЕ (новое — предлагать после отчётов)
 
