@@ -43,12 +43,17 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     # Blockchain
-    ethereum_rpc_url: str = "https://ethereum-rpc.publicnode.com"  # проверен из РФ 2026-09-22 (306ms); запас: eth.drpc.org, 1rpc.io/eth
+    ethereum_rpc_url: str = "https://ethereum-rpc.publicnode.com"
+    ethereum_sepolia_rpc_url: str = "https://ethereum-sepolia-rpc.publicnode.com"  # проверен из РФ 2026-09-22 (306ms); запас: eth.drpc.org, 1rpc.io/eth
     ricardian_rpc_url: str = "https://ethereum-sepolia-rpc.publicnode.com"
     registry_rpc_url: str = "https://ethereum-sepolia-rpc.publicnode.com"
     escrow_rpc_url: str = "https://ethereum-sepolia-rpc.publicnode.com"
     escrow_contract_address: str = "0xB73c9F99d40116501C0a18c4019Ac8E91ED7dE8a"  # Sepolia (S5-03)
     escrow_token_address: str = "0x212774d426519437d5Eb1126fE382fC7b7cCe7B0"  # mUSDC (Sepolia)
+    bridge_provider_url: str = "https://li.quest/v1"  # LI.FI (доступен из РФ, проверено 24.09)
+    bridge_api_key: str = ""  # опция (LI.FI работает и без ключа, с лимитами)
+    bridge_execution_enabled: bool = False  # STOP-GATE: реальные средства
+    bridge_timeout_seconds: float = 20.0
     swap_rpc_url: str = "https://ethereum-sepolia-rpc.publicnode.com"
     swap_router_address: str = "0xd11243Bd90EBc88e3A7D4eeA364Ee204A3aD509d"  # MockDEX (Sepolia, S5-01)
     swap_token_in: str = "0x212774d426519437d5Eb1126fE382fC7b7cCe7B0"   # mUSDC

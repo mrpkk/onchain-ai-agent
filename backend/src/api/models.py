@@ -346,3 +346,9 @@ class SwapExecuteRequest(BaseModel):
     amount_in: str  # wei (строка)
     slippage_bps: int = 50
     direction: str = "in_out"  # in_out | out_in
+
+
+# ── Bridge (S5-02) ───────────────────────────────────────────────────
+
+class BridgeExecuteRequest(BaseModel):
+    quote: dict

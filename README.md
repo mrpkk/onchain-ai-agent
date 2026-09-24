@@ -61,6 +61,7 @@
 | GET | `/api/v1/x402/demo/premium` | x402-демо: 402 → EIP-3009-подпись → сеттлмент (Sepolia, токен без ценности) |
 | GET | `/api/v1/chains` | Multi-chain реестр: 6 сетей (ETH/Sepolia/Base/Base Sepolia/BSC/Polygon) + health |
 | GET/POST | `/api/v1/swap/*` | Swap: котировка, slippage-guard, исполнение (MockDEX/Uniswap-V2, Sepolia) |
+| GET/POST | `/api/v1/bridge/*` | Bridge: реальные котировки LI.FI (AcrossV4), статус; исполнение gated |
 | GET | `/api/v1/health` · `/health` · `/health/deep` | Честные проверки компонентов |
 | WS | `/ws?token=<access>` | Live-события |
 | GET | `/docs` · `/openapi.json` | OpenAPI/Swagger |
@@ -100,7 +101,7 @@ DEBUG=true .venv/bin/uvicorn src.api.main:app --port 8000   # из backend/
 ## 🧪 Тесты
 
 ```bash
-# Backend: 307 тестов + coverage-гейт 80%
+# Backend: 318 тестов + coverage-гейт 80%
 backend/.venv/bin/python -m pytest backend/tests -q --cov=src --cov-fail-under=80
 
 # Контракты: 56 тестов (hardhat)

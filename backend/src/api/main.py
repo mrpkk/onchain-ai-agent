@@ -50,6 +50,7 @@ from .models import (
     PolicySimulateResponse,
     PolicyValidateRequest,
     PolicyValidateResponse,
+    BridgeExecuteRequest,
     EscrowCreateRequest,
     EscrowResolveRequest,
     RefreshRequest,
@@ -78,6 +79,7 @@ from ..runtime.policy_simulator import simulate_policy_change
 from ..runtime.reports import build_summary, decisions_csv, transactions_csv
 from ..runtime import manager as runtime_manager
 from ..integrations.agent_registry import AgentRegistryError, AgentRegistryService
+from ..integrations.bridge import BridgeError, BridgeService
 from ..integrations.escrow import EscrowError, EscrowService
 from ..integrations.x402 import X402Error, X402Service
 from ..integrations.ricardian import RicardianError, RicardianService
@@ -622,6 +624,10 @@ def _chain_http_error(exc) -> HTTPException:  # RicardianError | AgentRegistryEr
         "SLIPPAGE_CAP_EXCEEDED": 422,
         "INSUFFICIENT_LIQUIDITY": 422,
         "AGGREGATOR_UNAVAILABLE": 503,
+        "EXECUTION_DISABLED": 403,
+        "NO_ROUTE": 422,
+        "BRIDGE_UNAVAILABLE": 503,
+        "BRIDGE_ERROR": 502,
     }
     return HTTPException(
         status_code=status_map.get(exc.code, 502),
@@ -970,6 +976,57 @@ async def escrow_resolve(
     try:
         return await service.resolve(int(escrow_id), body.release_to_payee)
     except EscrowError as e:
+        raise _chain_http_error(e) from e
+
+
+# ── Bridge (S5-02) ──────────────────────────────────────────────────
+
+@app.get("/api/v1/bridge/info")
+async def bridge_info(current_user: Annotated[dict, Depends(get_current_user)]):
+    return await BridgeService().info()
+
+
+@app.get("/api/v1/bridge/quote")
+async def bridge_quote(
+    current_user: Annotated[dict, Depends(get_current_user)],
+    from_chain: int,
+    to_chain: int,
+    amount: str,
+    from_token: str = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+    to_token: str = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+):
+    try:
+        amount_wei = int(amount)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="amount должен быть целым (wei)") from None
+    try:
+        return await BridgeService().quote(from_chain, to_chain, amount_wei,
+                                           from_token=from_token, to_token=to_token)
+    except BridgeError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.get("/api/v1/bridge/status")
+async def bridge_status(
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tx_hash: str,
+    from_chain: int,
+    to_chain: int,
+):
+    try:
+        return await BridgeService().status(tx_hash, from_chain, to_chain)
+    except BridgeError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.post("/api/v1/bridge/execute")
+async def bridge_execute(
+    body: BridgeExecuteRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    try:
+        return await BridgeService().execute(body.quote)
+    except BridgeError as e:
         raise _chain_http_error(e) from e
 
 
