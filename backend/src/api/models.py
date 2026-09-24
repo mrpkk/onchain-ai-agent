@@ -338,3 +338,11 @@ class EscrowCreateRequest(BaseModel):
 
 class EscrowResolveRequest(BaseModel):
     release_to_payee: bool
+
+
+# ── Swap (S5-01) ─────────────────────────────────────────────────────
+
+class SwapExecuteRequest(BaseModel):
+    amount_in: str  # wei (строка)
+    slippage_bps: int = 50
+    direction: str = "in_out"  # in_out | out_in

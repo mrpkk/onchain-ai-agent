@@ -49,6 +49,11 @@ class Settings(BaseSettings):
     escrow_rpc_url: str = "https://ethereum-sepolia-rpc.publicnode.com"
     escrow_contract_address: str = "0xB73c9F99d40116501C0a18c4019Ac8E91ED7dE8a"  # Sepolia (S5-03)
     escrow_token_address: str = "0x212774d426519437d5Eb1126fE382fC7b7cCe7B0"  # mUSDC (Sepolia)
+    swap_rpc_url: str = "https://ethereum-sepolia-rpc.publicnode.com"
+    swap_router_address: str = "0xd11243Bd90EBc88e3A7D4eeA364Ee204A3aD509d"  # MockDEX (Sepolia, S5-01)
+    swap_token_in: str = "0x212774d426519437d5Eb1126fE382fC7b7cCe7B0"   # mUSDC
+    swap_token_out: str = "0x0eB3e17862A108Bbbc91989e6Ca1a3ed16f69710"  # xUSDC
+    swap_aggregator_url: str = ""  # опция (агрегаторы из РФ гео-заблокированы)
     private_rpc_enabled: bool = False  # private RPC только для mainnet-отправок (вкл. конфигом)
     private_rpc_urls: list[str] = [  # проверены из РФ 2026-09-24: flashbots 884ms, mevblocker 592ms
         "https://rpc.flashbots.net",

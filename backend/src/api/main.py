@@ -56,6 +56,7 @@ from .models import (
     RicardianCreateRequest,
     RicardianExecuteRequest,
     RicardianMilestoneIn,
+    SwapExecuteRequest,
     TierRequest,
     TokenRequest,
     TokenResponse,
@@ -80,6 +81,7 @@ from ..integrations.agent_registry import AgentRegistryError, AgentRegistryServi
 from ..integrations.escrow import EscrowError, EscrowService
 from ..integrations.x402 import X402Error, X402Service
 from ..integrations.ricardian import RicardianError, RicardianService
+from ..integrations.swap import SwapError, SwapService
 from ..runtime.badges import compute_badges
 from ..security.apikeys import ALLOWED_SCOPES, generate_api_key
 from ..security.dharma import PolicyError, TxContext, build_default_policy, compile_yaml, evaluate
@@ -617,6 +619,9 @@ def _chain_http_error(exc) -> HTTPException:  # RicardianError | AgentRegistryEr
         "RPC_UNAVAILABLE": 503,
         "SIMULATION_REVERT": 422,
         "BAD_INPUT": 422,
+        "SLIPPAGE_CAP_EXCEEDED": 422,
+        "INSUFFICIENT_LIQUIDITY": 422,
+        "AGGREGATOR_UNAVAILABLE": 503,
     }
     return HTTPException(
         status_code=status_map.get(exc.code, 502),
@@ -965,6 +970,64 @@ async def escrow_resolve(
     try:
         return await service.resolve(int(escrow_id), body.release_to_payee)
     except EscrowError as e:
+        raise _chain_http_error(e) from e
+
+
+# ── Swap (S5-01) ────────────────────────────────────────────────────
+
+@app.get("/api/v1/swap/info")
+async def swap_info(current_user: Annotated[dict, Depends(get_current_user)]):
+    service = SwapService()
+    try:
+        return await service.info()
+    except SwapError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.get("/api/v1/swap/quote")
+async def swap_quote(
+    current_user: Annotated[dict, Depends(get_current_user)],
+    amount_in: str,
+    slippage_bps: int = 50,
+    direction: str = "in_out",
+):
+    try:
+        amount = int(amount_in)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="amount_in должен быть целым (wei)") from None
+    service = SwapService()
+    try:
+        return await service.quote(amount, slippage_bps=slippage_bps, direction=direction)
+    except SwapError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.get("/api/v1/swap/aggregator")
+async def swap_aggregator(
+    current_user: Annotated[dict, Depends(get_current_user)],
+    amount_in: str = "1000000000000000000",
+):
+    service = SwapService()
+    try:
+        return await service.aggregator_quote(int(amount_in))
+    except SwapError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.post("/api/v1/swap/execute")
+async def swap_execute(
+    body: SwapExecuteRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    try:
+        amount = int(body.amount_in)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="amount_in должен быть целым (wei)") from None
+    service = SwapService()
+    try:
+        return await service.execute(amount, slippage_bps=body.slippage_bps,
+                                     direction=body.direction)
+    except SwapError as e:
         raise _chain_http_error(e) from e
 
 
