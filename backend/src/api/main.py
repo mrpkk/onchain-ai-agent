@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import json
 
 from pathlib import Path
 
@@ -12,7 +14,7 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
@@ -76,6 +78,7 @@ from ..runtime.reports import build_summary, decisions_csv, transactions_csv
 from ..runtime import manager as runtime_manager
 from ..integrations.agent_registry import AgentRegistryError, AgentRegistryService
 from ..integrations.escrow import EscrowError, EscrowService
+from ..integrations.x402 import X402Error, X402Service
 from ..integrations.ricardian import RicardianError, RicardianService
 from ..runtime.badges import compute_badges
 from ..security.apikeys import ALLOWED_SCOPES, generate_api_key
@@ -963,6 +966,51 @@ async def escrow_resolve(
         return await service.resolve(int(escrow_id), body.release_to_payee)
     except EscrowError as e:
         raise _chain_http_error(e) from e
+
+
+# ── x402-демо (S6-05) ───────────────────────────────────────────────
+
+@app.get("/api/v1/x402/demo/premium")
+async def x402_demo_premium(request: Request):
+    """Демо платного ресурса по протоколу x402 (тестнет, токен без ценности).
+
+    Без заголовка X-PAYMENT → 402 + payment requirements (x402-формат).
+    С валидным X-PAYMENT → верификация EIP-3009-подписи + сеттлмент → 200 + X-PAYMENT-RESPONSE.
+    """
+    service = X402Service()
+    resource = str(request.url)
+    payment_header = request.headers.get("X-PAYMENT", "").strip()
+    if not payment_header:
+        try:
+            requirements = service.payment_requirements(resource)
+        except X402Error as e:
+            raise _chain_http_error(e) from e
+        return JSONResponse(status_code=402, content=requirements)
+    try:
+        receipt = await service.verify_and_settle(payment_header)
+    except X402Error as e:
+        content: dict = {"error": {"code": e.code, "message": e.message}}
+        try:
+            content.update(service.payment_requirements(resource))
+        except X402Error:
+            pass
+        return JSONResponse(status_code=402, content=content)
+    response_header = base64.b64encode(
+        json.dumps(receipt, ensure_ascii=False).encode("utf-8")
+    ).decode("ascii")
+    return JSONResponse(
+        status_code=200,
+        content={
+            "demo": True,
+            "resource": "karta-premium-signal",
+            "message": "Демо-контент x402: в продакшене здесь платный ответ KARTA (INTL-профиль)",
+            "paid_by": receipt["payer"],
+            "amount_wei": receipt["amount_wei"],
+            "receipt_tx": receipt["tx_hash"],
+            "note": "Testnet-демо: xUSDC не имеет ценности; реальные платежи — STOP-GATE",
+        },
+        headers={"X-PAYMENT-RESPONSE": response_header},
+    )
 
 
 # ── Reports / export (S4-07) ───────────────────────────────────────────

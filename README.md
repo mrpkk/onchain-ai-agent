@@ -58,6 +58,7 @@
 | GET/POST | `/api/v1/agents/{id}/registry` | ERC-8004-паспорт: регистрация/верификация/репутация + бейджи |
 | GET | `/api/v1/registry/agents/{id}/metadata` | Публичный паспорт агента (metadataURI, без auth) |
 | GET/POST | `/api/v1/escrow/*` | Аренда агентов: эскроу-оплата, release/refund/dispute/resolve (Sepolia) |
+| GET | `/api/v1/x402/demo/premium` | x402-демо: 402 → EIP-3009-подпись → сеттлмент (Sepolia, токен без ценности) |
 | GET | `/api/v1/health` · `/health` · `/health/deep` | Честные проверки компонентов |
 | WS | `/ws?token=<access>` | Live-события |
 | GET | `/docs` · `/openapi.json` | OpenAPI/Swagger |
@@ -97,7 +98,7 @@ DEBUG=true .venv/bin/uvicorn src.api.main:app --port 8000   # из backend/
 ## 🧪 Тесты
 
 ```bash
-# Backend: 268 тестов + coverage-гейт 80%
+# Backend: 276 тестов + coverage-гейт 80%
 backend/.venv/bin/python -m pytest backend/tests -q --cov=src --cov-fail-under=80
 
 # Контракты: 56 тестов (hardhat)
@@ -128,6 +129,7 @@ Human → REST /api/v1 + WS /ws → [Dharma Engine] → [Simulation] → [Timelo
 - `docs/ARCHITECTURE.md` · `docs/SECURITY.md` — as-built архитектура и security-posture
 - `docs/API.md` — перечень API (генератор `docs/generate_api_md.py`)
 - `docs/MCP.md` · `docs/MCP_TOOL_CONTRACTS.md` — MCP-сервер: подключение и контракты (генератор `docs/generate_mcp_contracts.py`)
+- `docs/X402.md` — x402-демо (тестнет): поток, запуск, честные ограничения
 - `smart-contracts/` — Solidity 0.8.20 + Hardhat
 
 ---
