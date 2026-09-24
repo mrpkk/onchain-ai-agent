@@ -28,6 +28,9 @@ from .models import (
     AgentResponse,
     AgentStatus,
     AgentUpdate,
+    AAGuardianRequest,
+    AASessionKeyRequest,
+    AAUserOpRequest,
     ApprovalListResponse,
     ApprovalResponse,
     GoalRequest,
@@ -80,6 +83,7 @@ from ..runtime.reports import build_summary, decisions_csv, transactions_csv
 from ..runtime import manager as runtime_manager
 from ..integrations.agent_registry import AgentRegistryError, AgentRegistryService
 from ..integrations.bridge import BridgeError, BridgeService
+from ..integrations.erc4337 import AAError, ERC4337Service
 from ..integrations.escrow import EscrowError, EscrowService
 from ..integrations.x402 import X402Error, X402Service
 from ..integrations.ricardian import RicardianError, RicardianService
@@ -628,6 +632,7 @@ def _chain_http_error(exc) -> HTTPException:  # RicardianError | AgentRegistryEr
         "NO_ROUTE": 422,
         "BRIDGE_UNAVAILABLE": 503,
         "BRIDGE_ERROR": 502,
+        "AA_NOT_CONFIGURED": 503,
     }
     return HTTPException(
         status_code=status_map.get(exc.code, 502),
@@ -976,6 +981,70 @@ async def escrow_resolve(
     try:
         return await service.resolve(int(escrow_id), body.release_to_payee)
     except EscrowError as e:
+        raise _chain_http_error(e) from e
+
+
+# ── ERC-4337: smart account + session keys (S5-06) ──────────────────
+
+@app.get("/api/v1/erc4337/info")
+async def aa_info(current_user: Annotated[dict, Depends(get_current_user)]):
+    try:
+        return await ERC4337Service().info()
+    except AAError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.post("/api/v1/erc4337/session-keys", status_code=201)
+async def aa_add_session_key(
+    body: AASessionKeyRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    try:
+        spend = int(body.spend_limit_wei)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="spend_limit_wei должен быть целым") from None
+    try:
+        return await ERC4337Service().add_session_key(
+            body.key_address, body.valid_until, spend, body.allowed_target)
+    except AAError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.delete("/api/v1/erc4337/session-keys/{key_address}")
+async def aa_revoke_session_key(
+    key_address: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    try:
+        return await ERC4337Service().revoke_session_key(key_address)
+    except AAError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.post("/api/v1/erc4337/guardians", status_code=201)
+async def aa_add_guardian(
+    body: AAGuardianRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    try:
+        return await ERC4337Service().add_guardian(body.guardian)
+    except AAError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.post("/api/v1/erc4337/userop")
+async def aa_execute_userop(
+    body: AAUserOpRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    try:
+        value = int(body.value)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="value должен быть целым (wei)") from None
+    try:
+        return await ERC4337Service().execute_user_op(
+            body.target, value, body.data, use_session_key=body.use_session_key)
+    except AAError as e:
         raise _chain_http_error(e) from e
 
 

@@ -352,3 +352,23 @@ class SwapExecuteRequest(BaseModel):
 
 class BridgeExecuteRequest(BaseModel):
     quote: dict
+
+
+# ── ERC-4337 (S5-06) ─────────────────────────────────────────────────
+
+class AASessionKeyRequest(BaseModel):
+    key_address: str
+    valid_until: int = 0            # unix; 0 = бессрочно
+    spend_limit_wei: str = "0"      # лимит нативного value
+    allowed_target: str = ""        # "" = любая цель
+
+
+class AAGuardianRequest(BaseModel):
+    guardian: str
+
+
+class AAUserOpRequest(BaseModel):
+    target: str
+    value: str = "0"
+    data: str = "0x"
+    use_session_key: bool = False

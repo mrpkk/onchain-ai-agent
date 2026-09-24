@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     escrow_rpc_url: str = "https://ethereum-sepolia-rpc.publicnode.com"
     escrow_contract_address: str = "0xB73c9F99d40116501C0a18c4019Ac8E91ED7dE8a"  # Sepolia (S5-03)
     escrow_token_address: str = "0x212774d426519437d5Eb1126fE382fC7b7cCe7B0"  # mUSDC (Sepolia)
+    aa_rpc_url: str = "https://ethereum-sepolia-rpc.publicnode.com"
+    karta_aa_session_key: str = ""  # демо session key (тестнет, throwaway)
+    aa_entrypoint_address: str = "0x40a52b4959cCA148594D8Bd29ccE4C292E8730B0"  # KartaEntryPoint (Sepolia, S5-06)
+    aa_account_address: str = "0x2DE1302269746DaD1CC0f828030893D404AC572e"  # KartaSmartAccount (Sepolia, S5-06)
     bridge_provider_url: str = "https://li.quest/v1"  # LI.FI (доступен из РФ, проверено 24.09)
     bridge_api_key: str = ""  # опция (LI.FI работает и без ключа, с лимитами)
     bridge_execution_enabled: bool = False  # STOP-GATE: реальные средства
