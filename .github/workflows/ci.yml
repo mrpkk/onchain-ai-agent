@@ -8,7 +8,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
+        with: { python-version: "3.14" }  # как dev-окружение: на 3.12 coverage теряет greenlet-контексты SQLAlchemy (артефакт измерения)
       - run: pip install -r backend/requirements.txt pytest
       - name: Backend tests + coverage gate (80%)
         run: |

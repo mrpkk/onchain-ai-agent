@@ -7,7 +7,7 @@
 
 | Компонент | Версия | Зачем |
 |---|---|---|
-| Python | 3.12+ | backend |
+| Python | 3.14 (рекоменд.; CI = 3.14) | backend |
 | PostgreSQL | 16 | БД (dev — docker на 5433, системный PG занят) |
 | Docker | любой | PG/compose (dev и прод) |
 | Node.js | 20+ | контракты (Hardhat) |
