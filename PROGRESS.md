@@ -218,7 +218,7 @@ F1 Gasless ERC-4337 · F2 Digital twin · F3 Copilot · F4 Intent-engine · F5 �
 | 40 | 2026-09-24 | **Долги + доки:** plan-step timelock (S3-03), API.md регенерация (75 роутов), модульный live-регресс | `15ba3d2` | 328/328 + live | S2-02/S3-03 долги закрыты |
 | 41 | 2026-09-24 | **МЕРЖ v2.0-beta в main** (по команде владельца): 33 коммита, 85 файлов (+8841/−94), тег `v2.0-beta` | `3f0aa28` | 328/328 + 76 | P0–P6 в main; ветка продолжается |
 | 42 | 2026-09-24 | **Release-гигиена:** CHANGELOG.md (alpha/beta), `docs/DEPLOYMENT.md` (dev/prod/env/адреса Sepolia), CI `node --check` статики | `93d3b64` | 328/328 | на ветке; войдёт в следующий мерж |
-| 43 | 2026-09-25 | **CI-фикс:** coverage упал до 79% на новом коде → +10 тестов (MCP-tools, ERC-4337 внутренности, perception, planning) → **82%**, гейт пройден | `b31011f` | 338/338 | CI снова зелёный (проверяется) |
+| 43 | 2026-09-25 | **CI-фикс (корневая причина + покрытие):** CI был красным с S4-15 — при миграции PyJWT потерян транзитивный `cryptography` (+ отсутствовали `mcp`, `greenlet`) → падали импорты; восстановлено в requirements (`cryptography`, `mcp`, `eth-account`, `sqlalchemy[asyncio]`), **проверено в чистом venv: 338 passed, coverage 81.82%**; сверх того +10 осмысленных тестов (MCP-tools, ERC-4337, perception, planning) | `b31011f` + fix | 338/338 (clean venv) | CI должен стать зелёным |
 
 ## 💡 ИДЕИ НА ОБСУЖДЕНИЕ (новое — предлагать после отчётов)
 
