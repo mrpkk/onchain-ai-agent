@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "backend"))
 
 os.environ.setdefault("DEBUG", "true")
+os.environ.setdefault("TX_JITTER_MAX_SECONDS", "0")  # тесты не спят
 _TEST_DB_DIR = tempfile.mkdtemp(prefix="karta-tests-")
 os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{_TEST_DB_DIR}/test.db")
 

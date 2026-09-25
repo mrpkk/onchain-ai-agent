@@ -1,0 +1,25 @@
+{
+  "network": "sepolia",
+  "chainId": 11155111,
+  "deployer": "0xe14264bb1F24a5C95A620E00CE02d793daa12Cd2",
+  "timestamp": "2026-09-23T03:19:41.837Z",
+  "contracts": {
+    "AgentRegistry": "0x773945A9eA400e9c8704a2c02AAAbF449cFc20E5",
+    "Escrow": "0xB73c9F99d40116501C0a18c4019Ac8E91ED7dE8a",
+    "RicardianAgreement": "0x153010a3f18cf363A87364BB8182Fc13ABF95dF2",
+    "MockERC20": "0x212774d426519437d5Eb1126fE382fC7b7cCe7B0"
+  },
+  "deploymentTxs": {},
+  "smoke": {
+    "registerAgent": {
+      "name": "karta-smoke-1790133627580",
+      "txHash": "0x372abb3065e2a2f6658637b895bfdc9910fae7c9ab8aa8716b4af7ce1f54bcda",
+      "block": 11762219,
+      "gasUsed": "231272"
+    },
+    "agent": {
+      "agentId": "0",
+      "owner": "https://karta.local/agent/smoke.json"
+    }
+  }
+}

@@ -288,3 +288,32 @@ def test_core_tick_raises_approval_with_notifier(db_env):
             return len(await ApprovalRepository(session).list_pending_with_decision(user_id))
 
     assert _run(_pending_count()) == 1
+
+
+def test_notifier_from_env_supports_both_token_names(monkeypatch):
+    """Оба имени токена: KARTA_TELEGRAM_BOT_TOKEN (канон) и TG_KARTA_BOT (общий .env)."""
+    from src.integrations.telegram import notifier_from_env
+
+    monkeypatch.delenv("KARTA_TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("KARTA_TELEGRAM_CHAT_ID", raising=False)
+    monkeypatch.setenv("TG_KARTA_BOT", "123:ABC")
+    monkeypatch.setenv("TG_USER_ID", "42")
+
+    notifier = notifier_from_env()
+    assert notifier is not None
+    assert notifier.token == "123:ABC"
+    assert notifier.chat_id == "42"
+
+    monkeypatch.setenv("KARTA_TELEGRAM_BOT_TOKEN", "999:XYZ")
+    monkeypatch.setenv("KARTA_TELEGRAM_CHAT_ID", "77")
+    notifier = notifier_from_env()
+    assert notifier.token == "999:XYZ"
+    assert notifier.chat_id == "77"
+
+
+def test_notifier_from_env_none_without_token(monkeypatch):
+    from src.integrations.telegram import notifier_from_env
+
+    for var in ("KARTA_TELEGRAM_BOT_TOKEN", "TG_KARTA_BOT", "KARTA_TELEGRAM_CHAT_ID", "TG_USER_ID"):
+        monkeypatch.delenv(var, raising=False)
+    assert notifier_from_env() is None

@@ -16,6 +16,11 @@ function onLangChanged() {
     renderStatusCard();
     if (SELECTED) { refreshFeed(); refreshPending(); refreshAudit(); refreshReport(); }
     refreshApprovals();
+    refreshRicardian();
+    refreshEscrow();
+    refreshSwap();
+    refreshBridge();
+    refreshAA();
   }
 }
 
@@ -134,6 +139,11 @@ function showDashboard() {
   document.getElementById("dash-username").textContent = USERNAME;
   loadAgents();
   refreshApprovals();
+  refreshRicardian();
+  refreshEscrow();
+  refreshSwap();
+  refreshBridge();
+  refreshAA();
   connectWS();
 }
 
@@ -212,6 +222,12 @@ function renderAgents() {
     head.appendChild(statusBadge(agent.status));
     row.appendChild(head);
     row.appendChild(el("div", "meta", "chain_id " + agent.chain_id + " · " + (agent.strategy || "default")));
+    const onchain = agent.config && agent.config.onchain;
+    if (onchain && onchain.agent_id !== undefined) {
+      const chips = el("div", "meta");
+      chips.appendChild(el("span", "badge", "⛓ #" + onchain.agent_id + (onchain.verified ? " ✓" : "")));
+      row.appendChild(chips);
+    }
     row.onclick = () => selectAgent(agent.id);
 
     const actions = el("div", "agent-actions");
@@ -225,7 +241,9 @@ function renderAgents() {
     goalBtn.onclick = (e) => { e.stopPropagation(); showGoalModal(agent.id); };
     const txBtn = el("button", "btn small ghost", t("btn.tx"));
     txBtn.onclick = (e) => { e.stopPropagation(); showTxPanel(agent.id); };
-    actions.append(startBtn, stopBtn, killBtn, goalBtn, txBtn);
+    const passportBtn = el("button", "btn small ghost", t("btn.passport"));
+    passportBtn.onclick = (e) => { e.stopPropagation(); openRegistry(agent.id); };
+    actions.append(startBtn, stopBtn, killBtn, goalBtn, txBtn, passportBtn);
     row.appendChild(actions);
     list.appendChild(row);
   });
@@ -794,3 +812,389 @@ async function showTxPanel(agentId) {
   });
 }
 function hideTxPanel() { document.getElementById("tx-panel").classList.remove("show"); }
+
+
+/* ── Ricardian 2-of-3 (S6-03) ─────────────────────────────────────── */
+async function refreshRicardian() {
+  const list = document.getElementById("ric-list");
+  if (!list) return;
+  const wallet = document.getElementById("ric-wallet");
+  const info = await api("/api/v1/ricardian/wallet");
+  if (wallet && info && !info.error) {
+    wallet.textContent = t("ric.signer") + ": " + (info.signer || t("ric.no_signer"));
+  }
+  const data = await api("/api/v1/ricardian/agreements");
+  list.innerHTML = "";
+  if (!data || data.error || !data.agreements) {
+    list.appendChild(el("div", "empty", (data && data.detail) || t("ric.error")));
+    return;
+  }
+  if (!data.agreements.length) {
+    list.appendChild(el("div", "empty", t("ric.empty")));
+    return;
+  }
+  data.agreements.forEach((a) => list.appendChild(ricCard(a)));
+}
+
+function ricCard(a) {
+  const card = el("div", "decision-card");
+  const head = el("div", "decision-head");
+  head.appendChild(el("span", "badge", "#" + a.id + " · " + a.status));
+  head.appendChild(el("span", "muted", "✔ " + a.sign_count + "/2"));
+  card.appendChild(head);
+  const ms = el("div", "muted");
+  ms.style.fontSize = ".74rem";
+  ms.textContent = (a.milestones || [])
+    .map((m) => m.index + ". " + m.description + " — " + m.amount_wei +
+      (m.completed ? " ✔" : m.disputed ? " ⚠" : ""))
+    .join(" · ");
+  card.appendChild(ms);
+  const actions = el("div", "intent-actions");
+  const signBtn = el("button", "btn small ghost", t("ric.sign"));
+  signBtn.onclick = () => ricAction(a.id, "sign");
+  const execBtn = el("button", "btn small ghost", t("ric.execute"));
+  execBtn.onclick = () => {
+    const payee = prompt(t("ric.payee_prompt"), "");
+    if (payee) ricAction(a.id, "execute", 0, payee);
+  };
+  const dispBtn = el("button", "btn small ghost", t("ric.dispute"));
+  dispBtn.onclick = () => ricAction(a.id, "dispute", 0);
+  actions.append(signBtn, execBtn, dispBtn);
+  card.appendChild(actions);
+  return card;
+}
+
+async function ricAction(id, action, index = 0, payee = "") {
+  let url = "/api/v1/ricardian/agreements/" + id + "/" + action;
+  let body;
+  if (action === "execute") {
+    url = "/api/v1/ricardian/agreements/" + id + "/milestones/" + index + "/execute";
+    body = { payee: payee };
+  }
+  if (action === "dispute") {
+    url = "/api/v1/ricardian/agreements/" + id + "/milestones/" + index + "/dispute";
+  }
+  const res = await api(url, { method: "POST", body: body });
+  if (res && res.tx_hash) {
+    toast(t("ric.tx_ok") + " " + res.tx_hash.slice(0, 12) + "…", "success");
+    refreshRicardian();
+  } else {
+    toast((res && res.detail) || t("ric.error"), "error");
+  }
+}
+
+async function createRicardian() {
+  const parties = (document.getElementById("ric-parties").value || "")
+    .split(",").map((v) => v.trim()).filter(Boolean);
+  const token = (document.getElementById("ric-token").value || "").trim();
+  const lines = (document.getElementById("ric-milestones").value || "")
+    .split("\n").map((v) => v.trim()).filter(Boolean);
+  const milestones = lines.map((line) => {
+    const parts = line.split("|").map((v) => v.trim());
+    return { description: parts[0], amount_wei: parts[1], deadline: parseInt(parts[2], 10) };
+  });
+  if (!token || !milestones.length) {
+    toast(t("ric.fill"), "error");
+    return;
+  }
+  const res = await api("/api/v1/ricardian/agreements", {
+    method: "POST",
+    body: { parties: parties, token: token, milestones: milestones },
+  });
+  if (res && res.tx_hash) {
+    toast(t("ric.created") + " #" + res.agreement_id, "success");
+    refreshRicardian();
+  } else {
+    toast((res && res.detail) || t("ric.error"), "error");
+  }
+}
+
+
+/* ── Паспорт агента / ERC-8004 (S6-01) ────────────────────────────── */
+async function openRegistry(agentId) {
+  const panel = document.getElementById("registry-panel");
+  const body = document.getElementById("registry-body");
+  panel.style.display = "block";
+  body.replaceChildren(el("div", "empty", "…"));
+  const data = await api("/api/v1/agents/" + agentId + "/registry");
+  body.replaceChildren();
+  if (!data || data.error) {
+    body.appendChild(el("div", "empty", (data && data.detail) || t("ric.error")));
+    return;
+  }
+  const badges = el("div", "intent-actions");
+  (data.badges || []).forEach((b) => {
+    const chip = el("span", "badge", t("badge." + b.id) + (b.value !== null && b.value !== undefined ? " " + b.value : ""));
+    chip.dataset.state = b.tone === "success" ? "live" : undefined;
+    badges.appendChild(chip);
+  });
+  body.appendChild(badges);
+  const info = el("div", "muted");
+  info.style.fontSize = ".74rem";
+  if (data.onchain) {
+    info.textContent = "#" + data.onchain.agent_id + " · " + data.onchain.name +
+      " · rep " + data.onchain.reputation + (data.onchain.verified ? " · verified" : "") +
+      " · " + data.onchain.metadata_uri;
+  } else {
+    info.textContent = t("registry.none");
+  }
+  body.appendChild(info);
+  const actions = el("div", "intent-actions");
+  if (!data.onchain) {
+    const reg = el("button", "btn primary small", t("registry.register"));
+    reg.onclick = () => registryAction(agentId, "register", "POST");
+    actions.appendChild(reg);
+  } else {
+    if (!data.onchain.verified) {
+      const ver = el("button", "btn small ghost", t("registry.verify"));
+      ver.onclick = () => registryAction(agentId, "verify", "POST");
+      actions.appendChild(ver);
+    }
+    const sync = el("button", "btn small ghost", t("registry.sync_rep"));
+    sync.onclick = () => registryAction(agentId, "sync-reputation", "POST");
+    actions.appendChild(sync);
+  }
+  body.appendChild(actions);
+}
+
+function hideRegistry() {
+  document.getElementById("registry-panel").style.display = "none";
+}
+
+async function registryAction(agentId, action, method) {
+  const res = await api("/api/v1/agents/" + agentId + "/registry" + (action === "register" ? "" : "/" + action), { method: method });
+  if (res && res.tx_hash) {
+    toast(t("ric.tx_ok") + " " + res.tx_hash.slice(0, 12) + "…", "success");
+    loadAgents();
+    openRegistry(agentId);
+  } else {
+    toast((res && res.detail) || t("ric.error"), "error");
+  }
+}
+
+
+/* ── Аренда агентов / Escrow (S6-02) ──────────────────────────────── */
+async function refreshEscrow() {
+  const list = document.getElementById("escrow-list");
+  if (!list) return;
+  const wallet = document.getElementById("escrow-wallet");
+  const info = await api("/api/v1/escrow/wallet");
+  if (wallet && info && !info.error) {
+    wallet.textContent = t("ric.signer") + ": " + (info.signer || t("ric.no_signer")) +
+      " · mUSDC: " + (info.token_balance !== null && info.token_balance !== undefined
+        ? info.token_balance.toFixed(4) : "—");
+  }
+  const select = document.getElementById("escrow-agent");
+  if (select) {
+    const current = select.value;
+    select.replaceChildren();
+    AGENTS.forEach((a) => {
+      const option = document.createElement("option");
+      option.value = a.id;
+      option.textContent = a.name + (a.wallet_address ? "" : " (" + t("escrow.no_wallet") + ")");
+      option.disabled = !a.wallet_address;
+      select.appendChild(option);
+    });
+    if (current) select.value = current;
+  }
+  const data = await api("/api/v1/escrow");
+  list.replaceChildren();
+  if (!data || data.error || !data.escrows) {
+    list.appendChild(el("div", "empty", (data && data.detail) || t("ric.error")));
+    return;
+  }
+  if (!data.escrows.length) {
+    list.appendChild(el("div", "empty", t("escrow.empty")));
+    return;
+  }
+  data.escrows.forEach((e) => list.appendChild(escrowCard(e)));
+}
+
+function escrowCard(e) {
+  const card = el("div", "decision-card");
+  const head = el("div", "decision-head");
+  head.appendChild(el("span", "badge", "#" + e.id + " · " + t("escrow.status." + e.status)));
+  head.appendChild(el("span", "muted", (e.amount_wei / 1e18).toFixed(4) + " mUSDC"));
+  card.appendChild(head);
+  const meta = el("div", "muted");
+  meta.style.fontSize = ".74rem";
+  meta.textContent = "payer " + e.payer.slice(0, 10) + "… → payee " + e.payee.slice(0, 10) + "…";
+  card.appendChild(meta);
+  const actions = el("div", "intent-actions");
+  if (e.status === "locked") {
+    const release = el("button", "btn small", t("escrow.release"));
+    release.onclick = () => escrowAction(e.id, "release");
+    const refund = el("button", "btn small ghost", t("escrow.refund"));
+    refund.onclick = () => escrowAction(e.id, "refund");
+    const dispute = el("button", "btn small ghost", t("escrow.dispute"));
+    dispute.onclick = () => escrowAction(e.id, "dispute");
+    actions.append(release, refund, dispute);
+  }
+  if (e.status === "disputed") {
+    const toPayee = el("button", "btn small", t("escrow.resolve_payee"));
+    toPayee.onclick = () => escrowAction(e.id, "resolve", { release_to_payee: true });
+    const toPayer = el("button", "btn small ghost", t("escrow.resolve_payer"));
+    toPayer.onclick = () => escrowAction(e.id, "resolve", { release_to_payee: false });
+    actions.append(toPayee, toPayer);
+  }
+  card.appendChild(actions);
+  return card;
+}
+
+async function escrowAction(id, action, body) {
+  const res = await api("/api/v1/escrow/" + id + "/" + action, { method: "POST", body: body });
+  if (res && res.tx_hash) {
+    toast(t("ric.tx_ok") + " " + res.tx_hash.slice(0, 12) + "…", "success");
+    refreshEscrow();
+  } else {
+    toast((res && res.detail) || t("ric.error"), "error");
+  }
+}
+
+async function createEscrow() {
+  const select = document.getElementById("escrow-agent");
+  const amount = (document.getElementById("escrow-amount").value || "").trim();
+  const agentId = select && select.value ? select.value : null;
+  if (!agentId) {
+    toast(t("escrow.pick_agent"), "error");
+    return;
+  }
+  if (!/^\d+$/.test(amount)) {
+    toast(t("escrow.amount_ph"), "error");
+    return;
+  }
+  const res = await api("/api/v1/escrow", {
+    method: "POST",
+    body: { agent_id: agentId, amount_wei: amount },
+  });
+  if (res && res.tx_hash) {
+    toast(t("escrow.created") + " #" + res.escrow_id, "success");
+    refreshEscrow();
+  } else {
+    toast((res && res.detail) || t("ric.error"), "error");
+  }
+}
+
+
+/* ── Swap (S5-01) ─────────────────────────────────────────────────── */
+async function refreshSwap() {
+  const elInfo = document.getElementById("swap-info");
+  if (!elInfo) return;
+  const info = await api("/api/v1/swap/info");
+  if (info && !info.error) {
+    elInfo.textContent = t("swap.router") + ": " + (info.router || "—").slice(0, 10) + "… · mUSDC " +
+      (info.balance_in !== null ? (info.balance_in / 1e18).toFixed(3) : "—") + " · xUSDC " +
+      (info.balance_out !== null ? (info.balance_out / 1e18).toFixed(3) : "—") +
+      " · " + t("swap.reserves") + " " + (info.reserve0 / 1e18).toFixed(2) + "/" + (info.reserve1 / 1e18).toFixed(2);
+  } else {
+    elInfo.textContent = (info && info.detail) || t("ric.error");
+  }
+}
+
+async function quoteSwap() {
+  const amount = (document.getElementById("swap-amount").value || "").trim();
+  const slippage = (document.getElementById("swap-slippage").value || "50").trim();
+  const out = document.getElementById("swap-quote");
+  if (!/^\d+$/.test(amount)) { toast(t("swap.amount_ph"), "error"); return; }
+  const q = await api("/api/v1/swap/quote?amount_in=" + amount + "&slippage_bps=" + slippage);
+  out.textContent = q.error ? (q.detail || t("ric.error"))
+    : t("swap.out") + ": " + (q.amount_out / 1e18).toFixed(6) + " · " + t("swap.min") + ": " +
+      (q.min_amount_out / 1e18).toFixed(6) + " · impact " + q.price_impact_bps + " bps";
+}
+
+async function executeSwap() {
+  const amount = (document.getElementById("swap-amount").value || "").trim();
+  const slippage = parseInt(document.getElementById("swap-slippage").value || "50", 10);
+  if (!/^\d+$/.test(amount)) { toast(t("swap.amount_ph"), "error"); return; }
+  const res = await api("/api/v1/swap/execute", { method: "POST",
+    body: { amount_in: amount, slippage_bps: slippage } });
+  if (res && res.tx_hash) { toast(t("ric.tx_ok") + " " + res.tx_hash.slice(0, 12) + "…", "success"); refreshSwap(); }
+  else toast((res && res.detail) || t("ric.error"), "error");
+}
+
+/* ── Bridge (S5-02) ───────────────────────────────────────────────── */
+async function refreshBridge() {
+  const elInfo = document.getElementById("bridge-info");
+  if (!elInfo) return;
+  const info = await api("/api/v1/bridge/info");
+  if (info && !info.error) {
+    elInfo.textContent = info.provider + " · " + t("bridge.exec") + ": " +
+      (info.execution_enabled ? t("bridge.on") : t("bridge.off_gate"));
+  } else {
+    elInfo.textContent = (info && info.detail) || t("ric.error");
+  }
+}
+
+async function quoteBridge() {
+  const from = (document.getElementById("bridge-from").value || "").trim();
+  const to = (document.getElementById("bridge-to").value || "").trim();
+  const amount = (document.getElementById("bridge-amount").value || "").trim();
+  const out = document.getElementById("bridge-quote");
+  if (!/^\d+$/.test(amount)) { toast(t("bridge.amount_ph"), "error"); return; }
+  const q = await api("/api/v1/bridge/quote?from_chain=" + from + "&to_chain=" + to + "&amount=" + amount);
+  out.textContent = q.error ? (q.detail || t("ric.error"))
+    : q.tool_name + " · → " + (q.to_amount / 1e18).toFixed(6) + " · ~" + q.execution_seconds + "s · fees $" +
+      (q.fee_usd_total || 0).toFixed(4);
+}
+
+async function executeBridge() {
+  const from = (document.getElementById("bridge-from").value || "").trim();
+  const to = (document.getElementById("bridge-to").value || "").trim();
+  const amount = (document.getElementById("bridge-amount").value || "").trim();
+  if (!/^\d+$/.test(amount)) { toast(t("bridge.amount_ph"), "error"); return; }
+  const q = await api("/api/v1/bridge/quote?from_chain=" + from + "&to_chain=" + to + "&amount=" + amount);
+  if (!q || q.error) { toast((q && q.detail) || t("ric.error"), "error"); return; }
+  const res = await api("/api/v1/bridge/execute", { method: "POST", body: { quote: q } });
+  if (res && res.tx_hash) toast(t("ric.tx_ok") + " " + res.tx_hash.slice(0, 12) + "…", "success");
+  else toast((res && res.detail) || t("ric.error"), "error");
+}
+
+/* ── ERC-4337 (S5-06) ─────────────────────────────────────────────── */
+async function refreshAA() {
+  const elInfo = document.getElementById("aa-info");
+  if (!elInfo) return;
+  const info = await api("/api/v1/erc4337/info");
+  if (info && !info.error) {
+    elInfo.textContent = t("aa.account") + ": " + (info.account || "—").slice(0, 12) + "… · nonce " +
+      (info.nonce !== undefined ? info.nonce : "—") + " · session key: " +
+      (info.session_key || "—").slice(0, 12) + "…" +
+      (info.guardians && info.guardians.length ? " · guardians " + info.guardians.length : "");
+  } else {
+    elInfo.textContent = (info && info.detail) || t("ric.error");
+  }
+}
+
+async function aaAddKey() {
+  const key = (document.getElementById("aa-session-key").value || "").trim();
+  const limit = (document.getElementById("aa-limit").value || "0").trim();
+  if (!key) { toast(t("aa.key_ph"), "error"); return; }
+  const res = await api("/api/v1/erc4337/session-keys", { method: "POST",
+    body: { key_address: key, spend_limit_wei: limit, valid_until: 0 } });
+  if (res && res.tx_hash) { toast(t("ric.tx_ok") + " " + res.tx_hash.slice(0, 12) + "…", "success"); refreshAA(); }
+  else toast((res && res.detail) || t("ric.error"), "error");
+}
+
+async function aaRevokeKey() {
+  const key = (document.getElementById("aa-session-key").value || "").trim();
+  if (!key) { toast(t("aa.key_ph"), "error"); return; }
+  const res = await api("/api/v1/erc4337/session-keys/" + key, { method: "DELETE" });
+  if (res && res.tx_hash) { toast(t("ric.tx_ok") + " " + res.tx_hash.slice(0, 12) + "…", "success"); refreshAA(); }
+  else toast((res && res.detail) || t("ric.error"), "error");
+}
+
+async function aaExecute() {
+  const target = (document.getElementById("aa-target").value || "").trim();
+  const value = (document.getElementById("aa-value").value || "0").trim();
+  const useSession = document.getElementById("aa-use-session").checked;
+  const out = document.getElementById("aa-result");
+  if (!target) { toast(t("aa.target_ph"), "error"); return; }
+  const res = await api("/api/v1/erc4337/userop", { method: "POST",
+    body: { target: target, value: value, use_session_key: useSession } });
+  if (res && res.tx_hash) {
+    out.textContent = t("aa.op_ok") + " " + res.tx_hash.slice(0, 14) + "… (" +
+      (res.via_session_key ? "session key" : "owner") + ")";
+    refreshAA();
+  } else {
+    out.textContent = (res && res.detail) || t("ric.error");
+  }
+}

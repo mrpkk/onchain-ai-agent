@@ -281,3 +281,94 @@ class DecisionReplayResponse(BaseModel):
     now: dict = Field(default_factory=dict)
     verdict_changed: bool = False
     note: str = ""
+
+
+# ── API-ключи (S6-04) ─────────────────────────────────────────────────
+
+class ApiKeyCreate(BaseModel):
+    name: str = "mcp"
+    scopes: list[str] = Field(default_factory=lambda: ["mcp:read"])
+
+
+class ApiKeyCreated(BaseModel):
+    id: str
+    name: str
+    prefix: str
+    scopes: list[str]
+    created_at: datetime
+    key: str  # плейн-ключ показывается ОДИН раз
+
+
+class ApiKeyInfo(BaseModel):
+    id: str
+    name: str
+    prefix: str
+    scopes: list[str]
+    created_at: datetime
+    last_used_at: Optional[datetime] = None
+    revoked: bool = False
+
+
+# ── Ricardian 2-of-3 (S6-03) ─────────────────────────────────────────
+
+class RicardianMilestoneIn(BaseModel):
+    description: str
+    amount_wei: str  # строка, чтобы не терять точность (wei)
+    deadline: int    # unix timestamp
+
+
+class RicardianCreateRequest(BaseModel):
+    parties: list[str] = Field(default_factory=list)
+    token: str
+    milestones: list[RicardianMilestoneIn] = Field(default_factory=list)
+
+
+class RicardianExecuteRequest(BaseModel):
+    payee: str
+
+
+# ── Escrow-аренда (S6-02) ────────────────────────────────────────────
+
+class EscrowCreateRequest(BaseModel):
+    payee: str = ""
+    amount_wei: str
+    token: Optional[str] = None
+    agent_id: Optional[str] = None  # если задан — payee = кошелёк агента (аренда агента)
+
+
+class EscrowResolveRequest(BaseModel):
+    release_to_payee: bool
+
+
+# ── Swap (S5-01) ─────────────────────────────────────────────────────
+
+class SwapExecuteRequest(BaseModel):
+    amount_in: str  # wei (строка)
+    slippage_bps: int = 50
+    direction: str = "in_out"  # in_out | out_in
+
+
+# ── Bridge (S5-02) ───────────────────────────────────────────────────
+
+class BridgeExecuteRequest(BaseModel):
+    quote: dict
+
+
+# ── ERC-4337 (S5-06) ─────────────────────────────────────────────────
+
+class AASessionKeyRequest(BaseModel):
+    key_address: str
+    valid_until: int = 0            # unix; 0 = бессрочно
+    spend_limit_wei: str = "0"      # лимит нативного value
+    allowed_target: str = ""        # "" = любая цель
+
+
+class AAGuardianRequest(BaseModel):
+    guardian: str
+
+
+class AAUserOpRequest(BaseModel):
+    target: str
+    value: str = "0"
+    data: str = "0x"
+    use_session_key: bool = False

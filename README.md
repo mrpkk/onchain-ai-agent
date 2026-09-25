@@ -52,6 +52,17 @@
 | GET/POST/PUT | `/api/v1/decisions/{id}` | Replay: текущий вердикт vs сохранённый |
 | POST | `/api/v1/agents/{id}/kill-switch` | Экстренная остановка (soft/hard, терминальная) |
 | GET | `/api/v1/agents/{id}/transactions` | История транзакций |
+| GET/POST/DELETE | `/api/v1/api-keys` | API-ключи `karta_` для MCP (scope mcp:read) |
+| POST | `/mcp` | MCP-сервер (streamable HTTP, stateless, read-only v1) — см. `docs/MCP.md` |
+| GET/POST | `/api/v1/ricardian/*` | Ricardian 2-of-3: соглашения, подписи, вехи, споры (Sepolia) |
+| GET/POST | `/api/v1/agents/{id}/registry` | ERC-8004-паспорт: регистрация/верификация/репутация + бейджи |
+| GET | `/api/v1/registry/agents/{id}/metadata` | Публичный паспорт агента (metadataURI, без auth) |
+| GET/POST | `/api/v1/escrow/*` | Аренда агентов: эскроу-оплата, release/refund/dispute/resolve (Sepolia) |
+| GET | `/api/v1/x402/demo/premium` | x402-демо: 402 → EIP-3009-подпись → сеттлмент (Sepolia, токен без ценности) |
+| GET | `/api/v1/chains` | Multi-chain реестр: 6 сетей (ETH/Sepolia/Base/Base Sepolia/BSC/Polygon) + health |
+| GET/POST | `/api/v1/swap/*` | Swap: котировка, slippage-guard, исполнение (MockDEX/Uniswap-V2, Sepolia) |
+| GET/POST | `/api/v1/bridge/*` | Bridge: реальные котировки LI.FI (AcrossV4), статус; исполнение gated |
+| GET/POST | `/api/v1/erc4337/*` | ERC-4337: smart account, session keys (TTL/лимит/цель), guardians |
 | GET | `/api/v1/health` · `/health` · `/health/deep` | Честные проверки компонентов |
 | WS | `/ws?token=<access>` | Live-события |
 | GET | `/docs` · `/openapi.json` | OpenAPI/Swagger |
@@ -91,7 +102,7 @@ DEBUG=true .venv/bin/uvicorn src.api.main:app --port 8000   # из backend/
 ## 🧪 Тесты
 
 ```bash
-# Backend: 221 тест + coverage-гейт 80%
+# Backend: 328 тестов + coverage-гейт 80%
 backend/.venv/bin/python -m pytest backend/tests -q --cov=src --cov-fail-under=80
 
 # Контракты: 56 тестов (hardhat)
@@ -121,6 +132,8 @@ Human → REST /api/v1 + WS /ws → [Dharma Engine] → [Simulation] → [Timelo
 - `docs/ARCHITECTURE_CURRENT.md` — фактическая архитектура (до модернизации)
 - `docs/ARCHITECTURE.md` · `docs/SECURITY.md` — as-built архитектура и security-posture
 - `docs/API.md` — перечень API (генератор `docs/generate_api_md.py`)
+- `docs/MCP.md` · `docs/MCP_TOOL_CONTRACTS.md` — MCP-сервер: подключение и контракты (генератор `docs/generate_mcp_contracts.py`)
+- `docs/X402.md` — x402-демо (тестнет): поток, запуск, честные ограничения
 - `smart-contracts/` — Solidity 0.8.20 + Hardhat
 
 ---

@@ -75,15 +75,22 @@ async def collect_health(settings, started_at: float) -> dict:
         _tcp_check(settings.redis_url, 6379),
         _rpc_check(settings.ethereum_rpc_url),
     )
+    private_urls = getattr(settings, "private_rpc_urls", []) or []
+    if getattr(settings, "private_rpc_enabled", False) and private_urls:
+        private_rpc = await _rpc_check(private_urls[0])
+    else:
+        private_rpc = {"status": "disabled"}  # опциональный компонент (S5-05)
     components = {
         "database": database,
         "redis": redis_state,
         "rpc": rpc,
+        "private_rpc": private_rpc,
         "llm": _llm_status(),
         "keyvault": _keyvault_status(),
         "telegram": "configured" if os.getenv("KARTA_TELEGRAM_BOT_TOKEN") else "not_configured",
     }
     states = [v if isinstance(v, str) else v["status"] for v in components.values()]
+    states = [s for s in states if s != "disabled"]  # выключенные опциональные — вне агрегата
     if all(s in _OK_STATES for s in states):
         status = "ok"
     elif any(s in _OK_STATES for s in states):

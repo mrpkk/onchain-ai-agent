@@ -8,6 +8,7 @@ spending limits, and retry logic.
 import json
 import logging
 import os
+import random
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -15,6 +16,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
+from .gas_oracle import GasOracle, GasOracleError, ensure_within_cap, shared_oracle
 from web3 import Web3
 # web3 v7 auto-detects PoA chains
 
@@ -50,6 +52,7 @@ class TransactionResult:
     value: float
     gas_used: int
     gas_price_gwei: float
+    submit_via: str = "public"  # public | private
     block_number: Optional[int] = None
     error: Optional[str] = None
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -64,6 +67,7 @@ class TransactionResult:
             "value": self.value,
             "gas_used": self.gas_used,
             "gas_price_gwei": self.gas_price_gwei,
+            "submit_via": self.submit_via,
             "block_number": self.block_number,
             "error": self.error,
             "timestamp": self.timestamp.isoformat(),
@@ -163,8 +167,14 @@ class TransactionExecutor:
     RETRY_DELAY = 5  # seconds
     GAS_MULTIPLIER = 1.2  # 20% buffer
 
-    def __init__(self, wallet: WalletManager, w3: Web3, spending_limit: SpendingLimit = None):
+    def __init__(self, wallet: WalletManager, w3: Web3, spending_limit: SpendingLimit = None,
+                 gas_oracle: GasOracle | None = None, gas_cap_gwei: int = 0,
+                 private_w3: Web3 | None = None, jitter_max_seconds: float = 0.0):
         self.wallet = wallet
+        self.gas_oracle = gas_oracle or shared_oracle()
+        self.gas_cap_gwei = int(gas_cap_gwei or 0)
+        self.private_w3 = private_w3
+        self.jitter_max_seconds = max(0.0, float(jitter_max_seconds or 0.0))
         self.w3 = w3
         self.spending_limit = spending_limit or SpendingLimit()
         self.tx_log: list[TransactionResult] = []
@@ -185,6 +195,15 @@ class TransactionExecutor:
 
         return True, "OK"
 
+    def _resolve_fees(self):
+        """EIP-1559-поля из оракула + кап политики. Возвращает (fields|None, error|None)."""
+        try:
+            recommendation = self.gas_oracle.recommend(self.w3)
+            ensure_within_cap(recommendation, self.gas_cap_gwei)
+        except GasOracleError as e:
+            return None, e
+        return self.gas_oracle.fee_fields(recommendation), None
+
     def send_eth(self, to_address: str, amount_eth: float,
                  chain: str = "ethereum", gas_limit: int = 21000) -> TransactionResult:
         allowed, reason = self.check_spending_limit(amount_eth, to_address)
@@ -202,7 +221,19 @@ class TransactionExecutor:
             )
 
         value_wei = self.w3.to_wei(amount_eth, "ether")
-        gas_price = int(self.w3.eth.gas_price * self.GAS_MULTIPLIER)
+        fees, gas_error = self._resolve_fees()
+        if gas_error is not None:
+            return TransactionResult(
+                tx_hash="",
+                status=TxStatus.FAILED,
+                chain=chain,
+                from_address=self.wallet.address,
+                to_address=to_address,
+                value=amount_eth,
+                gas_used=0,
+                gas_price_gwei=0,
+                error=f"{gas_error.code}: {gas_error.message}",
+            )
         nonce = self.wallet.get_nonce(self.w3)
 
         tx = {
@@ -210,7 +241,7 @@ class TransactionExecutor:
             "to": Web3.to_checksum_address(to_address),
             "value": value_wei,
             "gas": gas_limit,
-            "gasPrice": gas_price,
+            **fees,
             "nonce": nonce,
             "chainId": self.w3.eth.chain_id,
         }
@@ -227,7 +258,19 @@ class TransactionExecutor:
         func = contract.functions[function_name](*(args or []))
 
         value_wei = self.w3.to_wei(value_eth, "ether") if value_eth > 0 else 0
-        gas_price = int(self.w3.eth.gas_price * self.GAS_MULTIPLIER)
+        fees, gas_error = self._resolve_fees()
+        if gas_error is not None:
+            return TransactionResult(
+                tx_hash="",
+                status=TxStatus.FAILED,
+                chain=chain,
+                from_address=self.wallet.address,
+                to_address=contract_address,
+                value=value_eth,
+                gas_used=0,
+                gas_price_gwei=0,
+                error=f"{gas_error.code}: {gas_error.message}",
+            )
         nonce = self.wallet.get_nonce(self.w3)
 
         try:
@@ -244,14 +287,14 @@ class TransactionExecutor:
                 to_address=contract_address,
                 value=value_eth,
                 gas_used=0,
-                gas_price_gwei=float(Web3.from_wei(gas_price, "gwei")),
+                gas_price_gwei=0,
                 error=f"Gas estimation failed: {e}",
             )
 
         tx = func.build_transaction({
             "from": Web3.to_checksum_address(self.wallet.address),
             "gas": int(gas_estimate * self.GAS_MULTIPLIER),
-            "gasPrice": gas_price,
+            **fees,
             "nonce": nonce,
             "chainId": self.w3.eth.chain_id,
             "value": value_wei,
@@ -291,7 +334,17 @@ class TransactionExecutor:
         decimals = contract.functions.decimals().call()
         approve_amount = self._to_approve_amount(decimals, amount)
 
-        gas_price = int(self.w3.eth.gas_price * self.GAS_MULTIPLIER)
+        fees, gas_error = self._resolve_fees()
+        if gas_error is not None:
+            return TransactionResult(
+                tx_hash="",
+                status=TxStatus.FAILED,
+                chain="ethereum",
+                from_address=self.wallet.address,
+                to_address=token_address,
+                value=0, gas_used=0, gas_price_gwei=0,
+                error=f"{gas_error.code}: {gas_error.message}",
+            )
         nonce = self.wallet.get_nonce(self.w3)
 
         func = contract.functions.approve(
@@ -314,7 +367,7 @@ class TransactionExecutor:
         tx = func.build_transaction({
             "from": Web3.to_checksum_address(self.wallet.address),
             "gas": int(gas_estimate * self.GAS_MULTIPLIER),
-            "gasPrice": gas_price,
+            **fees,
             "nonce": nonce,
             "chainId": self.w3.eth.chain_id,
         })
@@ -326,6 +379,24 @@ class TransactionExecutor:
         """Отзыв allowance: approve(spender, 0)."""
         return self.approve_token(token_address, spender, amount=0.0, chain=chain)
 
+    def _apply_jitter(self) -> None:
+        """Случайная задержка перед отправкой (анти-паттерн-детект). 0 = выключено."""
+        if self.jitter_max_seconds > 0:
+            delay = random.uniform(0.0, self.jitter_max_seconds)
+            logger.debug("TX jitter: %.2fs", delay)
+            time.sleep(delay)
+
+    def _submit_raw(self, raw_tx: bytes) -> tuple[object, str]:
+        """Отправка: private RPC (только mainnet, при наличии) → fallback на публичный."""
+        if self.private_w3 is not None:
+            try:
+                if int(self.w3.eth.chain_id) == 1:
+                    tx_hash = self.private_w3.eth.send_raw_transaction(raw_tx)
+                    return tx_hash, "private"
+            except Exception as e:  # noqa: BLE001 — private упал → честный fallback
+                logger.warning("Private RPC недоступен (%s) — отправка через публичный", type(e).__name__)
+        return self.w3.eth.send_raw_transaction(raw_tx), "public"
+
     def _execute_with_retry(self, tx: dict, value_eth: float,
                             to_address: str, chain: str) -> TransactionResult:
         last_error = None
@@ -333,7 +404,8 @@ class TransactionExecutor:
         for attempt in range(self.MAX_RETRIES):
             try:
                 raw_tx = self.wallet.sign_transaction(self.w3, tx)
-                tx_hash = self.w3.eth.send_raw_transaction(raw_tx)
+                self._apply_jitter()
+                tx_hash, submit_via = self._submit_raw(raw_tx)
                 tx_hash_hex = tx_hash.hex() if isinstance(tx_hash, bytes) else tx_hash
 
                 logger.info(f"TX submitted: {tx_hash_hex} (attempt {attempt + 1})")
@@ -348,7 +420,8 @@ class TransactionExecutor:
                     to_address=to_address,
                     value=value_eth,
                     gas_used=receipt["gas_used"],
-                    gas_price_gwei=float(Web3.from_wei(tx.get("gasPrice", 0), "gwei")),
+                    gas_price_gwei=float(Web3.from_wei(tx.get("maxFeePerGas") or tx.get("gasPrice", 0), "gwei")),
+                    submit_via=submit_via,
                     block_number=receipt["block_number"],
                     error=None if receipt["status"] == 1 else "Transaction reverted",
                 )

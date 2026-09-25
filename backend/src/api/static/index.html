@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#0A0E17">
 <title>KARTA — Cockpit</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/static/icons/icon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/static/icons/icon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png">
+<meta property="og:title" content="KARTA — Trusted On-Chain Agent">
+<meta property="og:description" content="Trust layer между AI и ончейн-действием: агент предлагает — политика разрешает">
+<meta property="og:image" content="/static/icons/og-image.png">
+<meta property="og:type" content="website">
 <link rel="manifest" href="/static/manifest.webmanifest">
 <link rel="stylesheet" href="/static/tokens.css">
 <link rel="stylesheet" href="/static/dashboard.css">
@@ -123,6 +130,98 @@
         <button class="btn small ghost" onclick="downloadCsv('transactions')" data-i18n="btn.csv_transactions">CSV транзакции</button>
         <button class="btn small ghost" onclick="downloadCsv('audit')" data-i18n="btn.csv_audit">CSV аудит</button>
       </div>
+    </section>
+    <section class="panel wide">
+      <div class="panel-head">
+        <h3 data-i18n="panel.escrow">Аренда агентов (Escrow)</h3>
+        <button class="btn ghost small" onclick="refreshEscrow()" data-i18n="btn.refresh">Обновить</button>
+      </div>
+      <div class="muted" id="escrow-wallet" style="font-size:.74rem"></div>
+      <div class="chat-row" style="margin:8px 0">
+        <select id="escrow-agent"></select>
+        <input id="escrow-amount" data-i18n-placeholder="escrow.amount_ph">
+        <button class="btn primary small" onclick="createEscrow()" data-i18n="escrow.create">Арендовать</button>
+      </div>
+      <div id="escrow-list" class="feed"><div class="empty">—</div></div>
+    </section>
+
+    <section class="panel wide">
+      <div class="panel-head">
+        <h3 data-i18n="panel.swap">Swap (Uniswap-V2, тестнет)</h3>
+        <button class="btn ghost small" onclick="refreshSwap()" data-i18n="btn.refresh">Обновить</button>
+      </div>
+      <div class="muted" id="swap-info" style="font-size:.74rem"></div>
+      <div class="chat-row" style="margin:8px 0">
+        <input id="swap-amount" data-i18n-placeholder="swap.amount_ph">
+        <input id="swap-slippage" value="50" style="max-width:90px">
+        <button class="btn small ghost" onclick="quoteSwap()" data-i18n="swap.quote">Котировка</button>
+        <button class="btn primary small" onclick="executeSwap()" data-i18n="swap.execute">Swap</button>
+      </div>
+      <div id="swap-quote" class="chat-preview"></div>
+    </section>
+
+    <section class="panel wide">
+      <div class="panel-head">
+        <h3 data-i18n="panel.bridge">Bridge (LI.FI)</h3>
+        <button class="btn ghost small" onclick="refreshBridge()" data-i18n="btn.refresh">Обновить</button>
+      </div>
+      <div class="muted" id="bridge-info" style="font-size:.74rem"></div>
+      <div class="chat-row" style="margin:8px 0">
+        <input id="bridge-from" value="1" style="max-width:80px" title="from chain">
+        <input id="bridge-to" value="8453" style="max-width:80px" title="to chain">
+        <input id="bridge-amount" data-i18n-placeholder="bridge.amount_ph">
+        <button class="btn small ghost" onclick="quoteBridge()" data-i18n="bridge.quote">Котировка</button>
+        <button class="btn primary small" onclick="executeBridge()" data-i18n="bridge.execute">Bridge</button>
+      </div>
+      <div id="bridge-quote" class="chat-preview"></div>
+    </section>
+
+    <section class="panel wide">
+      <div class="panel-head">
+        <h3 data-i18n="panel.aa">Smart Account (ERC-4337)</h3>
+        <button class="btn ghost small" onclick="refreshAA()" data-i18n="btn.refresh">Обновить</button>
+      </div>
+      <div class="muted" id="aa-info" style="font-size:.74rem"></div>
+      <div class="chat-row" style="margin:8px 0">
+        <input id="aa-session-key" data-i18n-placeholder="aa.key_ph">
+        <input id="aa-limit" data-i18n-placeholder="aa.limit_ph" style="max-width:150px">
+        <button class="btn small ghost" onclick="aaAddKey()" data-i18n="aa.add_key">Добавить session key</button>
+        <button class="btn small ghost" onclick="aaRevokeKey()" data-i18n="aa.revoke_key">Отозвать</button>
+      </div>
+      <div class="chat-row" style="margin:0 0 8px">
+        <input id="aa-target" data-i18n-placeholder="aa.target_ph">
+        <input id="aa-value" data-i18n-placeholder="aa.value_ph" style="max-width:130px">
+        <label class="muted" style="font-size:.74rem;display:flex;align-items:center;gap:4px">
+          <input type="checkbox" id="aa-use-session" checked style="width:auto"> <span data-i18n="aa.use_session">через session key</span>
+        </label>
+        <button class="btn primary small" onclick="aaExecute()" data-i18n="aa.execute">UserOp</button>
+      </div>
+      <div id="aa-result" class="chat-preview"></div>
+    </section>
+
+    <section class="panel wide" id="registry-panel" style="display:none">
+      <div class="panel-head">
+        <h3 data-i18n="panel.registry">Паспорт агента (ERC-8004)</h3>
+        <button class="icon-btn" onclick="hideRegistry()">✕</button>
+      </div>
+      <div id="registry-body"></div>
+    </section>
+
+    <section class="panel wide">
+      <div class="panel-head">
+        <h3 data-i18n="panel.ricardian">Соглашения (Ricardian 2-of-3)</h3>
+        <button class="btn ghost small" onclick="refreshRicardian()" data-i18n="btn.refresh">Обновить</button>
+      </div>
+      <div class="muted" id="ric-wallet" style="font-size:.74rem"></div>
+      <div class="chat-row" style="margin:8px 0">
+        <input id="ric-parties" data-i18n-placeholder="ric.parties_ph">
+        <input id="ric-token" value="0x212774d426519437d5Eb1126fE382fC7b7cCe7B0" title="mUSDC (Sepolia)">
+      </div>
+      <textarea id="ric-milestones" rows="2" style="width:100%;margin-bottom:8px" data-i18n-placeholder="ric.milestones_ph"></textarea>
+      <div class="intent-actions">
+        <button class="btn primary small" onclick="createRicardian()" data-i18n="ric.create">Создать соглашение</button>
+      </div>
+      <div id="ric-list" class="feed" style="margin-top:10px"><div class="empty">—</div></div>
     </section>
   </main>
 

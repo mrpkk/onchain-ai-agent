@@ -17,6 +17,7 @@ from web3 import Web3
 from .perception import BlockchainPerception, PriceOracle
 from .reasoning import LLMReasoner, RiskAssessor, AgentDecision
 from .planning import AgentPlanner, Plan, PlanStatus, StepType
+from .gas_oracle import shared_oracle
 from .execution import (
     WalletManager, TransactionExecutor, SpendingLimit,
     TransactionResult, TxStatus,
@@ -170,6 +171,24 @@ class OnChainAgent:
         if self.executor is None:
             w3 = self.perception.get_web3(self.config.chain)
             if w3:
+                gas_cap_gwei = 0
+                try:
+                    gas_cap_gwei = int(getattr(self.policy.model.limits, "gas_gwei_cap", 0) or 0)
+                except Exception:  # noqa: BLE001 — политика не должна ломать сборку
+                    pass
+                private_w3 = None
+                try:
+                    from ..config.settings import get_settings
+
+                    settings = get_settings()
+                    if settings.private_rpc_enabled and settings.private_rpc_urls:
+                        private_w3 = Web3(Web3.HTTPProvider(
+                            settings.private_rpc_urls[0],
+                            request_kwargs={"timeout": 15.0},
+                        ))
+                    jitter_max = float(settings.tx_jitter_max_seconds or 0.0)
+                except Exception:  # noqa: BLE001 — настройки не должны ломать сборку
+                    jitter_max = 0.0
                 self.executor = TransactionExecutor(
                     wallet=self.wallet,
                     w3=w3,
@@ -177,6 +196,9 @@ class OnChainAgent:
                         daily_limit=self.config.daily_limit,
                         per_tx_limit=self.config.per_tx_limit,
                     ),
+                    gas_cap_gwei=gas_cap_gwei,
+                    private_w3=private_w3,
+                    jitter_max_seconds=jitter_max,
                 )
         return self.wallet
 
@@ -190,8 +212,13 @@ class OnChainAgent:
             return None
         gas_price = 0.0
         try:
-            gas_price = float(self.perception.get_gas_price(self.config.chain) or 0.0)
-        except Exception as e:
+            w3 = self.perception.get_web3(self.config.chain)
+            if w3 is not None:
+                # S5-04: кап сверяем по реальной EIP-1559-оценке (maxFeePerGas), не по legacy
+                gas_price = float(shared_oracle().recommend(w3).max_fee_gwei)
+            else:
+                gas_price = float(self.perception.get_gas_price(self.config.chain) or 0.0)
+        except Exception as e:  # noqa: BLE001
             logger.warning("Dharma: gas price недоступен (%s) — газ-кап пропущен", e)
         ctx = TxContext(
             action=action,
@@ -358,6 +385,16 @@ class OnChainAgent:
             await self._sakshi_append("timelock_result", {
                 "id": item.id, "status": result.status.value, "error": result.error,
             })
+            # S3-03 (долг): завершаем plan-step, который был отложен в timelock
+            step_id = item.params.get("_plan_step_id")
+            if step_id and self.state.current_plan is not None:
+                for step in self.state.current_plan.steps:
+                    if step.id == step_id:
+                        step.status = (PlanStatus.COMPLETED
+                                       if result.status == TxStatus.CONFIRMED
+                                       else PlanStatus.FAILED)
+                        step.result = result.to_dict()
+                        break
 
     async def execute_intent(self, action: str, params: dict) -> dict:
         """Исполнение подтверждённого намерения из чата (S4-03).
@@ -620,13 +657,25 @@ class OnChainAgent:
                     step.error = blocked.error
                     return
 
+                # S3-03 (долг): plan-step путь проходит timelock так же, как decision-путь
+                delay = self._undo_delay(step.step_type.value, step.params)
+                if delay > 0:
+                    params = dict(step.params)
+                    params["_plan_step_id"] = step.id
+                    result = await self._schedule_with_undo(step.step_type.value, params, delay)
+                    step.status = PlanStatus.BLOCKED
+                    step.error = f"Scheduled with undo window ({delay}s)"
+                    step.result = result.to_dict()
+                    return
+
             if step.step_type == StepType.READ_STATE:
                 state = await self._gather_state()
                 step.result = state
                 step.status = PlanStatus.COMPLETED
 
             elif step.step_type == StepType.TRANSFER:
-                result = self.executor.send_eth(
+                result = await asyncio.to_thread(
+                    self.executor.send_eth,
                     to_address=step.params.get("to", ""),
                     amount_eth=step.params.get("amount", 0),
                     chain=step.chain,

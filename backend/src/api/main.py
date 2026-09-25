@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import json
 
 from pathlib import Path
 
@@ -12,17 +14,23 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 
 from .models import (
     AgentCreate,
+    ApiKeyCreate,
+    ApiKeyCreated,
+    ApiKeyInfo,
     AgentListResponse,
     AgentResponse,
     AgentStatus,
     AgentUpdate,
+    AAGuardianRequest,
+    AASessionKeyRequest,
+    AAUserOpRequest,
     ApprovalListResponse,
     ApprovalResponse,
     GoalRequest,
@@ -45,7 +53,14 @@ from .models import (
     PolicySimulateResponse,
     PolicyValidateRequest,
     PolicyValidateResponse,
+    BridgeExecuteRequest,
+    EscrowCreateRequest,
+    EscrowResolveRequest,
     RefreshRequest,
+    RicardianCreateRequest,
+    RicardianExecuteRequest,
+    RicardianMilestoneIn,
+    SwapExecuteRequest,
     TierRequest,
     TokenRequest,
     TokenResponse,
@@ -56,8 +71,8 @@ from .models import (
     UserOut,
 )
 from ..config.settings import get_settings, validate_security
-from ..db import (AgentRepository, ApprovalRepository, DecisionRepository, PolicyRepository,
-                  TransactionRepository, UserRepository, create_all, session_scope)
+from ..db import (AgentRepository, ApiKeyRepository, ApprovalRepository, DecisionRepository,
+                  PolicyRepository, TransactionRepository, UserRepository, create_all, session_scope)
 from ..runtime import TIER_POLICY_TEMPLATES, build_agent
 from ..runtime.approvals import resolve_approval
 from ..runtime.drift import detect_drift
@@ -66,6 +81,15 @@ from ..runtime.replay import replay_decision
 from ..runtime.policy_simulator import simulate_policy_change
 from ..runtime.reports import build_summary, decisions_csv, transactions_csv
 from ..runtime import manager as runtime_manager
+from ..integrations.agent_registry import AgentRegistryError, AgentRegistryService
+from ..integrations.bridge import BridgeError, BridgeService
+from ..integrations.erc4337 import AAError, ERC4337Service
+from ..integrations.escrow import EscrowError, EscrowService
+from ..integrations.x402 import X402Error, X402Service
+from ..integrations.ricardian import RicardianError, RicardianService
+from ..integrations.swap import SwapError, SwapService
+from ..runtime.badges import compute_badges
+from ..security.apikeys import ALLOWED_SCOPES, generate_api_key
 from ..security.dharma import PolicyError, TxContext, build_default_policy, compile_yaml, evaluate
 from ..agent.intent import parse_intent
 from ..agent.policy_intent import build_policy_yaml, parse_policy_rule
@@ -116,6 +140,9 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 from contextlib import asynccontextmanager as _asynccontextmanager
 
 
+from ..mcp.server import mcp_dispatcher  # noqa: E402
+
+
 @_asynccontextmanager
 async def _lifespan(_app: FastAPI):
     await create_all()  # dev-convenience; в прод-контуре схема ведётся Alembic
@@ -141,7 +168,8 @@ async def _lifespan(_app: FastAPI):
             logging.getLogger("uvicorn.error").info("Telegram poller запущен")
     except Exception as e:  # noqa: BLE001 — не роняем старт из-за интеграции
         logging.getLogger("uvicorn.error").warning("Telegram poller не запущен: %s", e)
-    yield
+    async with mcp_dispatcher.lifespan():
+        yield
     if telegram_task is not None:
         stop_event.set()
         telegram_task.cancel()
@@ -169,6 +197,34 @@ app = FastAPI(
 
 app.include_router(ws_router)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+# MCP-сервер (S6-04): streamable HTTP (stateless) на POST /mcp
+from starlette.routing import Route as _StarletteRoute  # noqa: E402
+
+
+async def _mcp_forward(request: Request) -> Response:
+    """Точная точка POST /mcp без redirect 307: запрос уходит в MCP-диспетчер (path → /)."""
+    scope = dict(request.scope)
+    scope["path"] = "/"
+    messages: list[dict] = []
+
+    async def _send(message: dict) -> None:
+        messages.append(message)
+
+    await mcp_dispatcher(scope, request.receive, _send)
+    start = next(m for m in messages if m["type"] == "http.response.start")
+    body = b"".join(
+        m.get("body", b"") for m in messages if m["type"] == "http.response.body"
+    )
+    headers = {k.decode(): v.decode() for k, v in start.get("headers", [])}
+    return Response(content=body, status_code=start["status"], headers=headers)
+
+
+app.router.routes.append(
+    _StarletteRoute("/mcp", endpoint=_mcp_forward,
+                    methods=["POST", "GET", "DELETE", "OPTIONS"])
+)
+app.mount("/mcp", mcp_dispatcher)
 
 app.add_middleware(
     CORSMiddleware,
@@ -500,6 +556,665 @@ async def list_transactions(
         total = await repo.count_for_agent(agent.id)
         items = [_tx_to_response(tx) for tx in txs]
     return TransactionListResponse(transactions=items, total=total)
+
+
+# ── API-ключи для MCP (S6-04) ────────────────────────────────────────
+
+@app.post("/api/v1/api-keys", response_model=ApiKeyCreated, status_code=201)
+async def create_api_key(
+    body: ApiKeyCreate,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    scopes = list(dict.fromkeys(body.scopes))
+    if not scopes or any(s not in ALLOWED_SCOPES for s in scopes):
+        raise HTTPException(status_code=422, detail=f"scopes: {list(ALLOWED_SCOPES)}")
+    plain, key_hash, prefix = generate_api_key()
+    async with session_scope() as session:
+        key = await ApiKeyRepository(session).create(
+            uuid.UUID(current_user["id"]), body.name[:64], prefix, key_hash, scopes
+        )
+        return ApiKeyCreated(
+            id=str(key.id), name=key.name, prefix=key.prefix, scopes=scopes,
+            created_at=key.created_at, key=plain,
+        )
+
+
+@app.get("/api/v1/api-keys", response_model=list[ApiKeyInfo])
+async def list_api_keys(current_user: Annotated[dict, Depends(get_current_user)]):
+    async with session_scope() as session:
+        keys = await ApiKeyRepository(session).list_by_owner(uuid.UUID(current_user["id"]))
+        return [
+            ApiKeyInfo(
+                id=str(k.id), name=k.name, prefix=k.prefix,
+                scopes=(k.scopes or {}).get("list", []), created_at=k.created_at,
+                last_used_at=k.last_used_at, revoked=k.revoked_at is not None,
+            )
+            for k in keys
+        ]
+
+
+@app.delete("/api/v1/api-keys/{key_id}", response_model=ApiKeyInfo)
+async def revoke_api_key(
+    key_id: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    async with session_scope() as session:
+        repo = ApiKeyRepository(session)
+        try:
+            key = await repo.get(uuid.UUID(key_id))
+        except ValueError:
+            key = None
+        if key is None or key.user_id != uuid.UUID(current_user["id"]):
+            raise HTTPException(status_code=404, detail="API key not found")
+        await repo.revoke(key)
+        return ApiKeyInfo(
+            id=str(key.id), name=key.name, prefix=key.prefix,
+            scopes=(key.scopes or {}).get("list", []), created_at=key.created_at,
+            last_used_at=key.last_used_at, revoked=True,
+        )
+
+
+# ── Ricardian 2-of-3 (S6-03) ─────────────────────────────────────────
+
+def _chain_http_error(exc) -> HTTPException:  # RicardianError | AgentRegistryError
+    status_map = {
+        "NOT_FOUND": 404,
+        "NOT_CONFIGURED": 503,
+        "SIGNER_MISSING": 503,
+        "MAINNET_FORBIDDEN": 403,
+        "RPC_UNAVAILABLE": 503,
+        "SIMULATION_REVERT": 422,
+        "BAD_INPUT": 422,
+        "SLIPPAGE_CAP_EXCEEDED": 422,
+        "INSUFFICIENT_LIQUIDITY": 422,
+        "AGGREGATOR_UNAVAILABLE": 503,
+        "EXECUTION_DISABLED": 403,
+        "NO_ROUTE": 422,
+        "BRIDGE_UNAVAILABLE": 503,
+        "BRIDGE_ERROR": 502,
+        "AA_NOT_CONFIGURED": 503,
+    }
+    return HTTPException(
+        status_code=status_map.get(exc.code, 502),
+        detail=f"{exc.code}: {exc.message}",
+    )
+
+
+@app.get("/api/v1/ricardian/wallet")
+async def ricardian_wallet(current_user: Annotated[dict, Depends(get_current_user)]):
+    service = RicardianService()
+    return {
+        "signer": service.signer_address,
+        "contract": service.contract_address,
+        "chain": "sepolia",
+        "ready": service.signer_address is not None,
+    }
+
+
+@app.get("/api/v1/ricardian/agreements")
+async def ricardian_list(
+    current_user: Annotated[dict, Depends(get_current_user)],
+    limit: int = 20,
+):
+    service = RicardianService()
+    try:
+        agreements = await service.list_agreements(limit=max(1, min(limit, 50)))
+    except RicardianError as e:
+        raise _chain_http_error(e) from e
+    return {"agreements": agreements, "total": len(agreements)}
+
+
+@app.get("/api/v1/ricardian/agreements/{agreement_id}")
+async def ricardian_detail(
+    agreement_id: int,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    service = RicardianService()
+    try:
+        return await service.get_agreement(int(agreement_id))
+    except RicardianError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.post("/api/v1/ricardian/agreements", status_code=201)
+async def ricardian_create(
+    body: RicardianCreateRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    service = RicardianService()
+    try:
+        return await service.create_agreement(
+            parties=body.parties,
+            token=body.token,
+            milestones=[m.model_dump() for m in body.milestones],
+        )
+    except RicardianError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.post("/api/v1/ricardian/agreements/{agreement_id}/sign")
+async def ricardian_sign(
+    agreement_id: int,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    service = RicardianService()
+    try:
+        return await service.sign(int(agreement_id))
+    except RicardianError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.post("/api/v1/ricardian/agreements/{agreement_id}/milestones/{index}/execute")
+async def ricardian_execute(
+    agreement_id: int,
+    index: int,
+    body: RicardianExecuteRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    service = RicardianService()
+    try:
+        return await service.execute_milestone(int(agreement_id), int(index), body.payee)
+    except RicardianError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.post("/api/v1/ricardian/agreements/{agreement_id}/milestones/{index}/dispute")
+async def ricardian_dispute(
+    agreement_id: int,
+    index: int,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    service = RicardianService()
+    try:
+        return await service.dispute_milestone(int(agreement_id), int(index))
+    except RicardianError as e:
+        raise _chain_http_error(e) from e
+
+
+# ── ERC-8004 реестр агентов (S6-01) ──────────────────────────────────
+
+@app.get("/api/v1/agents/{agent_id}/registry")
+async def agent_registry_info(
+    agent_id: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+        ref = (agent.config or {}).get("onchain") or {}
+        service = AgentRegistryService()
+        onchain = None
+        if ref.get("agent_id") is not None:
+            try:
+                onchain = await service.get_agent(int(ref["agent_id"]))
+            except AgentRegistryError as e:
+                if e.code != "NOT_FOUND":
+                    raise _chain_http_error(e) from e
+        summary = await build_summary(session, agent.id)
+        health = await compute_health_score(session, agent.id)
+        badges = compute_badges(
+            onchain=onchain, health=health, trust=summary.get("trust"), tier=int(agent.tier or 0)
+        )
+        return {
+            "onchain": onchain,
+            "badges": badges,
+            "contract": service.contract_address,
+            "signer": service.signer_address,
+            "note": "Бейджи — только из реальных данных (реестр/health/trust/tier)",
+        }
+
+
+@app.post("/api/v1/agents/{agent_id}/registry", status_code=201)
+async def agent_registry_register(
+    agent_id: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+        ref = (agent.config or {}).get("onchain") or {}
+        if ref.get("agent_id") is not None:
+            raise HTTPException(status_code=409, detail="Агент уже зарегистрирован в реестре")
+        service = AgentRegistryService()
+        base_name = (agent.name or f"karta-{str(agent.id)[:8]}")[:60]
+        onchain_name = base_name
+        try:
+            if await service.resolve_name(base_name) is not None:
+                onchain_name = f"{base_name[:50]}-{str(agent.id)[:6]}"
+            metadata_uri = (
+                f"{get_settings().public_base_url}/api/v1/registry/agents/{agent.id}/metadata"
+            )
+            result = await service.register(onchain_name, metadata_uri)
+        except AgentRegistryError as e:
+            raise _chain_http_error(e) from e
+        config = dict(agent.config or {})
+        config["onchain"] = {
+            "chain_id": result["chain_id"],
+            "agent_id": result["agent_id"],
+            "name": onchain_name,
+            "tx_hash": result["tx_hash"],
+            "metadata_uri": metadata_uri,
+        }
+        agent.config = config
+        return result
+
+
+@app.post("/api/v1/agents/{agent_id}/registry/verify")
+async def agent_registry_verify(
+    agent_id: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+        ref = (agent.config or {}).get("onchain") or {}
+        if ref.get("agent_id") is None:
+            raise HTTPException(status_code=409, detail="Агент ещё не зарегистрирован в реестре")
+        service = AgentRegistryService()
+        try:
+            result = await service.verify(int(ref["agent_id"]))
+        except AgentRegistryError as e:
+            raise _chain_http_error(e) from e
+        config = dict(agent.config or {})
+        onchain = dict(config.get("onchain") or {})
+        onchain["verified"] = True
+        config["onchain"] = onchain
+        agent.config = config
+        return result
+
+
+@app.post("/api/v1/agents/{agent_id}/registry/sync-reputation")
+async def agent_registry_sync_reputation(
+    agent_id: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+        ref = (agent.config or {}).get("onchain") or {}
+        if ref.get("agent_id") is None:
+            raise HTTPException(status_code=409, detail="Агент ещё не зарегистрирован в реестре")
+        health = await compute_health_score(session, agent.id)
+        service = AgentRegistryService()
+        try:
+            result = await service.set_reputation(int(ref["agent_id"]), int(health["score"]))
+        except AgentRegistryError as e:
+            raise _chain_http_error(e) from e
+        return {**result, "score": health["score"]}
+
+
+@app.get("/api/v1/registry/agents/{agent_id}/metadata")
+async def registry_public_metadata(agent_id: str):
+    """Публичный паспорт агента (metadataURI в реестре): без решений/аудита/политик."""
+    async with session_scope() as session:
+        try:
+            aid = uuid.UUID(agent_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="Agent not found") from None
+        agent = await AgentRepository(session).get(aid)
+        if agent is None:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        ref = (agent.config or {}).get("onchain") or {}
+        return {
+            "name": agent.name,
+            "description": agent.description or "",
+            "karta": {
+                "tier": int(agent.tier or 0),
+                "chain_id": agent.chain_id,
+                "wallet_address": agent.wallet_address,
+                "status": agent.status,
+                "registered_onchain": ref.get("agent_id"),
+            },
+            "note": "Публичный паспорт KARTA: без решений, аудита и политик",
+        }
+
+
+# ── Escrow-аренда агентов (S6-02) ────────────────────────────────────
+
+@app.get("/api/v1/escrow/wallet")
+async def escrow_wallet(current_user: Annotated[dict, Depends(get_current_user)]):
+    service = EscrowService()
+    return {
+        "signer": service.signer_address,
+        "contract": service.contract_address,
+        "token": service.token_address,
+        "token_balance": await service.token_balance(),
+        "chain": "sepolia",
+        "ready": service.signer_address is not None,
+    }
+
+
+@app.get("/api/v1/escrow")
+async def escrow_list(
+    current_user: Annotated[dict, Depends(get_current_user)],
+    limit: int = 20,
+):
+    service = EscrowService()
+    try:
+        escrows = await service.list_recent(limit=max(1, min(limit, 50)))
+    except EscrowError as e:
+        raise _chain_http_error(e) from e
+    return {"escrows": escrows, "total": len(escrows)}
+
+
+@app.get("/api/v1/escrow/{escrow_id}")
+async def escrow_detail(
+    escrow_id: int,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    service = EscrowService()
+    try:
+        return await service.get_escrow(int(escrow_id))
+    except EscrowError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.post("/api/v1/escrow", status_code=201)
+async def escrow_create(
+    body: EscrowCreateRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    payee = body.payee.strip()
+    if body.agent_id:
+        async with session_scope() as session:
+            agent = await _get_owned_agent(session, body.agent_id, current_user)
+            if not agent.wallet_address:
+                raise HTTPException(
+                    status_code=409,
+                    detail="У агента не задан wallet_address — аренда невозможна",
+                )
+            payee = agent.wallet_address
+    if not payee:
+        raise HTTPException(status_code=422, detail="payee или agent_id обязателен")
+    try:
+        amount = int(body.amount_wei)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="amount_wei должен быть целым (wei)") from None
+    if amount <= 0:
+        raise HTTPException(status_code=422, detail="amount_wei должен быть > 0")
+    service = EscrowService()
+    try:
+        return await service.create_rental(payee, amount, token_address=body.token)
+    except EscrowError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.post("/api/v1/escrow/{escrow_id}/release")
+async def escrow_release(
+    escrow_id: int,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    service = EscrowService()
+    try:
+        return await service.release(int(escrow_id))
+    except EscrowError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.post("/api/v1/escrow/{escrow_id}/refund")
+async def escrow_refund(
+    escrow_id: int,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    service = EscrowService()
+    try:
+        return await service.refund(int(escrow_id))
+    except EscrowError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.post("/api/v1/escrow/{escrow_id}/dispute")
+async def escrow_dispute(
+    escrow_id: int,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    service = EscrowService()
+    try:
+        return await service.dispute(int(escrow_id))
+    except EscrowError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.post("/api/v1/escrow/{escrow_id}/resolve")
+async def escrow_resolve(
+    escrow_id: int,
+    body: EscrowResolveRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    service = EscrowService()
+    try:
+        return await service.resolve(int(escrow_id), body.release_to_payee)
+    except EscrowError as e:
+        raise _chain_http_error(e) from e
+
+
+# ── ERC-4337: smart account + session keys (S5-06) ──────────────────
+
+@app.get("/api/v1/erc4337/info")
+async def aa_info(current_user: Annotated[dict, Depends(get_current_user)]):
+    try:
+        return await ERC4337Service().info()
+    except AAError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.post("/api/v1/erc4337/session-keys", status_code=201)
+async def aa_add_session_key(
+    body: AASessionKeyRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    try:
+        spend = int(body.spend_limit_wei)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="spend_limit_wei должен быть целым") from None
+    try:
+        return await ERC4337Service().add_session_key(
+            body.key_address, body.valid_until, spend, body.allowed_target)
+    except AAError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.delete("/api/v1/erc4337/session-keys/{key_address}")
+async def aa_revoke_session_key(
+    key_address: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    try:
+        return await ERC4337Service().revoke_session_key(key_address)
+    except AAError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.post("/api/v1/erc4337/guardians", status_code=201)
+async def aa_add_guardian(
+    body: AAGuardianRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    try:
+        return await ERC4337Service().add_guardian(body.guardian)
+    except AAError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.post("/api/v1/erc4337/userop")
+async def aa_execute_userop(
+    body: AAUserOpRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    try:
+        value = int(body.value)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="value должен быть целым (wei)") from None
+    try:
+        return await ERC4337Service().execute_user_op(
+            body.target, value, body.data, use_session_key=body.use_session_key)
+    except AAError as e:
+        raise _chain_http_error(e) from e
+
+
+# ── Bridge (S5-02) ──────────────────────────────────────────────────
+
+@app.get("/api/v1/bridge/info")
+async def bridge_info(current_user: Annotated[dict, Depends(get_current_user)]):
+    return await BridgeService().info()
+
+
+@app.get("/api/v1/bridge/quote")
+async def bridge_quote(
+    current_user: Annotated[dict, Depends(get_current_user)],
+    from_chain: int,
+    to_chain: int,
+    amount: str,
+    from_token: str = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+    to_token: str = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+):
+    try:
+        amount_wei = int(amount)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="amount должен быть целым (wei)") from None
+    try:
+        return await BridgeService().quote(from_chain, to_chain, amount_wei,
+                                           from_token=from_token, to_token=to_token)
+    except BridgeError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.get("/api/v1/bridge/status")
+async def bridge_status(
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tx_hash: str,
+    from_chain: int,
+    to_chain: int,
+):
+    try:
+        return await BridgeService().status(tx_hash, from_chain, to_chain)
+    except BridgeError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.post("/api/v1/bridge/execute")
+async def bridge_execute(
+    body: BridgeExecuteRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    try:
+        return await BridgeService().execute(body.quote)
+    except BridgeError as e:
+        raise _chain_http_error(e) from e
+
+
+# ── Swap (S5-01) ────────────────────────────────────────────────────
+
+@app.get("/api/v1/swap/info")
+async def swap_info(current_user: Annotated[dict, Depends(get_current_user)]):
+    service = SwapService()
+    try:
+        return await service.info()
+    except SwapError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.get("/api/v1/swap/quote")
+async def swap_quote(
+    current_user: Annotated[dict, Depends(get_current_user)],
+    amount_in: str,
+    slippage_bps: int = 50,
+    direction: str = "in_out",
+):
+    try:
+        amount = int(amount_in)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="amount_in должен быть целым (wei)") from None
+    service = SwapService()
+    try:
+        return await service.quote(amount, slippage_bps=slippage_bps, direction=direction)
+    except SwapError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.get("/api/v1/swap/aggregator")
+async def swap_aggregator(
+    current_user: Annotated[dict, Depends(get_current_user)],
+    amount_in: str = "1000000000000000000",
+):
+    service = SwapService()
+    try:
+        return await service.aggregator_quote(int(amount_in))
+    except SwapError as e:
+        raise _chain_http_error(e) from e
+
+
+@app.post("/api/v1/swap/execute")
+async def swap_execute(
+    body: SwapExecuteRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    try:
+        amount = int(body.amount_in)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="amount_in должен быть целым (wei)") from None
+    service = SwapService()
+    try:
+        return await service.execute(amount, slippage_bps=body.slippage_bps,
+                                     direction=body.direction)
+    except SwapError as e:
+        raise _chain_http_error(e) from e
+
+
+# ── Сети / multi-chain (S5-07) ──────────────────────────────────────
+
+@app.get("/api/v1/chains")
+async def list_chains(current_user: Annotated[dict, Depends(get_current_user)]):
+    from ..agent.chains import CHAINS, shared_health
+
+    cache = shared_health()
+    healths = await asyncio.gather(*(cache.probe_async(name) for name in CHAINS))
+    chains = [
+        {**cfg.to_dict(), "health": health.to_dict()}
+        for cfg, health in zip(CHAINS.values(), healths)
+    ]
+    return {"chains": chains, "total": len(chains)}
+
+
+# ── x402-демо (S6-05) ───────────────────────────────────────────────
+
+@app.get("/api/v1/x402/demo/premium")
+async def x402_demo_premium(request: Request):
+    """Демо платного ресурса по протоколу x402 (тестнет, токен без ценности).
+
+    Без заголовка X-PAYMENT → 402 + payment requirements (x402-формат).
+    С валидным X-PAYMENT → верификация EIP-3009-подписи + сеттлмент → 200 + X-PAYMENT-RESPONSE.
+    """
+    service = X402Service()
+    resource = str(request.url)
+    payment_header = request.headers.get("X-PAYMENT", "").strip()
+    if not payment_header:
+        try:
+            requirements = service.payment_requirements(resource)
+        except X402Error as e:
+            raise _chain_http_error(e) from e
+        return JSONResponse(status_code=402, content=requirements)
+    try:
+        receipt = await service.verify_and_settle(payment_header)
+    except X402Error as e:
+        content: dict = {"error": {"code": e.code, "message": e.message}}
+        try:
+            content.update(service.payment_requirements(resource))
+        except X402Error:
+            pass
+        return JSONResponse(status_code=402, content=content)
+    response_header = base64.b64encode(
+        json.dumps(receipt, ensure_ascii=False).encode("utf-8")
+    ).decode("ascii")
+    return JSONResponse(
+        status_code=200,
+        content={
+            "demo": True,
+            "resource": "karta-premium-signal",
+            "message": "Демо-контент x402: в продакшене здесь платный ответ KARTA (INTL-профиль)",
+            "paid_by": receipt["payer"],
+            "amount_wei": receipt["amount_wei"],
+            "receipt_tx": receipt["tx_hash"],
+            "note": "Testnet-демо: xUSDC не имеет ценности; реальные платежи — STOP-GATE",
+        },
+        headers={"X-PAYMENT-RESPONSE": response_header},
+    )
 
 
 # ── Reports / export (S4-07) ───────────────────────────────────────────
