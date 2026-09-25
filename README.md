@@ -134,6 +134,8 @@ Human → REST /api/v1 + WS /ws → [Dharma Engine] → [Simulation] → [Timelo
 - `docs/API.md` — перечень API (генератор `docs/generate_api_md.py`)
 - `docs/MCP.md` · `docs/MCP_TOOL_CONTRACTS.md` — MCP-сервер: подключение и контракты (генератор `docs/generate_mcp_contracts.py`)
 - `docs/X402.md` — x402-демо (тестнет): поток, запуск, честные ограничения
+- `docs/DEPLOYMENT.md` — развёртывание (dev/prod, env, адреса Sepolia)
+- `CHANGELOG.md` — релизы v2.0-alpha / v2.0-beta
 - `smart-contracts/` — Solidity 0.8.20 + Hardhat
 
 ---
