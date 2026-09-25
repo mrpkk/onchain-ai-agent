@@ -143,3 +143,125 @@ def test_api_error_mapping(client, monkeypatch):
     response = client.post("/api/v1/erc4337/userop",
                            json={"target": "0x" + "55" * 20}, headers=headers)
     assert response.status_code == 422
+
+
+# ── Внутренние пути (fake-контракты, без сети) ───────────────────────
+
+from types import SimpleNamespace  # noqa: E402
+
+
+class _Fn:
+    def __init__(self, result=None):
+        self._result = result
+
+    def call(self, *args, **kwargs):
+        return self._result
+
+    def build_transaction(self, tx):
+        return dict(tx)
+
+
+class _FakeEth:
+    chain_id = 11155111
+
+    class _AccountObj:
+        @staticmethod
+        def sign_transaction(tx, private_key):
+            return SimpleNamespace(raw_transaction=b"raw")
+
+    account = _AccountObj()
+
+    def get_transaction_count(self, addr, *args):
+        return 7
+
+    def send_raw_transaction(self, raw):
+        return b"\xaa\xbb"
+
+    def wait_for_transaction_receipt(self, tx_hash, timeout=0):
+        return SimpleNamespace(status=1, blockNumber=9, gasUsed=50000)
+
+
+class _FakeW3:
+    def __init__(self):
+        self.eth = _FakeEth()
+
+    @staticmethod
+    def to_checksum_address(address):
+        return address
+
+
+class _FakeEp:
+    def __init__(self):
+        self.functions = self
+
+    def getUserOpHash(self, op):
+        return _Fn(b"\x11" * 32)
+
+    def handleOps(self, ops, beneficiary):
+        return _Fn()
+
+
+class _FakeAccountContract:
+    def __init__(self, nonce=5):
+        self.functions = self
+        self._nonce = nonce
+
+    def getNonce(self):
+        return _Fn(self._nonce)
+
+    def addSessionKey(self, *args):
+        return _Fn()
+
+    def revokeSessionKey(self, *args):
+        return _Fn()
+
+    def addGuardian(self, *args):
+        return _Fn()
+
+    def owner(self):
+        return _Fn("0x" + "ab" * 20)
+
+    def guardians(self, index):
+        if index == 0:
+            return _Fn("0x" + "cd" * 20)
+        raise Exception("out of range")
+
+
+def _fake_service(**kwargs) -> ERC4337Service:
+    svc = ERC4337Service(entrypoint="0xEP", account="0xACC",
+                         owner_key=OWNER_KEY, session_key=SESSION_KEY, **kwargs)
+    svc._w3 = _FakeW3()
+    svc._ep = _FakeEp()
+    svc._account = _FakeAccountContract()
+    return svc
+
+
+def test_userop_build_sign_and_handleops_fake():
+    svc = _fake_service()
+    result = svc._build_and_execute_sync("0x" + "55" * 20, 0, "0x", use_session_key=True)
+    assert result["status"] == 1 and result["nonce"] == 5
+    assert result["via_session_key"] is True
+    assert result["signer"] == svc.session_key_address
+
+    owner_result = svc._build_and_execute_sync("0x" + "55" * 20, 0, "0x", use_session_key=False)
+    assert owner_result["via_session_key"] is False
+
+
+def test_owner_writes_fake():
+    import asyncio
+
+    svc = _fake_service()
+    add = asyncio.run(svc.add_session_key("0x" + "33" * 20, 0, 100))
+    assert add["status"] == 1 and add["tx_hash"]
+    assert asyncio.run(svc.revoke_session_key("0x" + "33" * 20))["status"] == 1
+    assert asyncio.run(svc.add_guardian("0x" + "44" * 20))["status"] == 1
+
+
+def test_info_reads_fake_contract():
+    import asyncio
+
+    svc = _fake_service()
+    info = asyncio.run(svc.info())
+    assert info["account_owner"] == "0x" + "ab" * 20
+    assert info["nonce"] == 5
+    assert info["guardians"] == ["0x" + "cd" * 20]

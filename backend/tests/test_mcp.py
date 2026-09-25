@@ -133,3 +133,57 @@ def test_revoked_key_rejected(client):
                 {"name": "get_wallet", "arguments": {"agent_id": env["agent"]["id"]}},
                 key=env["key"])
     assert "UNAUTHORIZED" in _tool_text(call)
+
+
+def test_mcp_remaining_read_tools(client, monkeypatch):
+    """Покрытие read-tools: transactions/portfolio/audit/decision + RPC-пути (balance/gas)."""
+    env = _setup(client, username="mcp_tools")
+
+    async def fake_rpc(rpc_url, fn):
+        class FakeW3:
+            class eth:
+                chain_id = 11155111
+                block_number = 100
+                gas_price = 25 * 10**9
+
+                @staticmethod
+                def get_balance(_addr):
+                    return 123456789
+
+                @staticmethod
+                def get_block(_):
+                    class B:
+                        baseFeePerGas = 20 * 10**9
+                        number = 100
+                    return B()
+
+            @staticmethod
+            def to_checksum_address(a):
+                return a
+
+        return fn(FakeW3()), None
+
+    monkeypatch.setattr("src.mcp.server._rpc_call", fake_rpc)
+
+    for tool in ("get_balance", "get_gas", "get_portfolio"):
+        call = _rpc(client, "tools/call",
+                    {"name": tool, "arguments": {"agent_id": env["agent"]["id"]}},
+                    key=env["key"])
+        assert call.status_code == 200, tool
+        assert "error" not in _tool_text(call) or "NO_WALLET" in _tool_text(call)
+
+    call = _rpc(client, "tools/call",
+                {"name": "get_transactions", "arguments": {"agent_id": env["agent"]["id"]}},
+                key=env["key"])
+    assert '"total"' in _tool_text(call)
+
+    monkeypatch.setenv("SAKSHI_AUDIT_KEY", "test-audit-key")
+    call = _rpc(client, "tools/call",
+                {"name": "audit_log", "arguments": {"agent_id": env["agent"]["id"]}},
+                key=env["key"])
+    assert "items" in _tool_text(call)
+
+    call = _rpc(client, "tools/call",
+                {"name": "get_decision", "arguments": {"decision_id": "not-a-uuid"}},
+                key=env["key"])
+    assert "NOT_FOUND" in _tool_text(call)
