@@ -115,6 +115,37 @@ async def main():
             r = await c.post(f"/api/v1/agents/{agent_id}/stop", headers=headers)
             print("stop:", r.status_code)
 
+        # ── Модульный смоук P5/P6 (read-only + gated) ──────────────────
+        print("--- модули P5/P6 ---")
+        chains = (await c.get("/api/v1/chains", headers=headers)).json()
+        ok_chains = sum(1 for ch in chains["chains"] if ch["health"]["status"] == "ok")
+        print("chains:", f"{ok_chains}/{chains['total']} ok")
+
+        swap_info = (await c.get("/api/v1/swap/info", headers=headers)).json()
+        print("swap info:", swap_info.get("router", "")[:12] + "…", "| ready:", swap_info.get("ready"))
+        quote = (await c.get("/api/v1/swap/quote?amount_in=100000000000000000&slippage_bps=50",
+                             headers=headers)).json()
+        print("swap quote:", "in 0.1 →", quote.get("amount_out"), "| impact", quote.get("price_impact_bps"), "bps")
+
+        bridge_info = (await c.get("/api/v1/bridge/info", headers=headers)).json()
+        print("bridge:", bridge_info.get("provider"), "| exec:", bridge_info.get("execution_enabled"))
+        bq = (await c.get("/api/v1/bridge/quote?from_chain=1&to_chain=8453&amount=10000000000000000",
+                          headers=headers)).json()
+        print("bridge quote:", bq.get("tool_name"), "| ETA", bq.get("execution_seconds"), "s")
+
+        aa = (await c.get("/api/v1/erc4337/info", headers=headers)).json()
+        print("erc4337:", (aa.get("account") or "")[:12] + "…", "| session key:", aa.get("session_key_configured"))
+
+        x402 = await c.get("/api/v1/x402/demo/premium")
+        print("x402 challenge:", x402.status_code, "|", x402.json().get("accepts", [{}])[0].get("scheme"))
+
+        escrow = (await c.get("/api/v1/escrow?limit=1", headers=headers)).json()
+        print("escrow:", escrow.get("total"), "записей")
+        ric = (await c.get("/api/v1/ricardian/agreements?limit=1", headers=headers)).json()
+        print("ricardian:", ric.get("total"), "соглашений")
+        reg = (await c.get(f"/api/v1/agents/{agent_id}/registry", headers=headers)).json()
+        print("registry badges:", [b["id"] for b in reg.get("badges", [])])
+
 
 if __name__ == "__main__":
     asyncio.run(main())

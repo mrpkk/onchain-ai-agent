@@ -133,3 +133,46 @@ def test_due_action_blocked_by_kill_switch():
     _run(agent._process_due_actions())
     assert spy.calls == []
     assert item.status == "pending"
+
+
+# ── Plan-step путь (долг S3-03) ──────────────────────────────────────
+
+def test_plan_step_scheduled_with_undo_and_completed_after_window():
+    from src.agent.planning import Plan, PlanStatus, PlanStep, StepType
+
+    agent, spy = _agent(_undo_policy(window=300, threshold=0.05))
+    plan = Plan(id="p1", goal="tl-plan", steps=[
+        PlanStep(id="s1", step_type=StepType.TRANSFER, description="send",
+                 chain="sepolia", params={"to": "0xabc", "amount": 0.1}),
+    ])
+    agent.state.current_plan = plan
+
+    _run(agent._execute_plan_step())
+    step = plan.steps[0]
+    assert step.status == PlanStatus.BLOCKED  # отложен, не исполнен
+    assert spy.calls == []
+    pending = agent.timelock.pending()
+    assert len(pending) == 1 and pending[0].params.get("_plan_step_id") == "s1"
+
+    pending[0].execute_after = datetime.now(timezone.utc) - timedelta(seconds=1)
+    _run(agent._process_due_actions())
+
+    assert len(spy.calls) == 1  # исполнено после окна
+    assert step.status == PlanStatus.COMPLETED  # шаг закрыт
+    assert pending[0].status == "executed"
+
+
+def test_plan_step_below_threshold_executes_immediately():
+    from src.agent.planning import Plan, PlanStatus, PlanStep, StepType
+
+    agent, spy = _agent(_undo_policy(window=300, threshold=0.05))
+    plan = Plan(id="p2", goal="tl-plan-2", steps=[
+        PlanStep(id="s1", step_type=StepType.TRANSFER, description="send-small",
+                 chain="sepolia", params={"to": "0xabc", "amount": 0.01}),
+    ])
+    agent.state.current_plan = plan
+
+    _run(agent._execute_plan_step())
+    assert plan.steps[0].status == PlanStatus.COMPLETED
+    assert len(spy.calls) == 1
+    assert agent.timelock.pending() == []

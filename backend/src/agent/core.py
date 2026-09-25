@@ -385,6 +385,16 @@ class OnChainAgent:
             await self._sakshi_append("timelock_result", {
                 "id": item.id, "status": result.status.value, "error": result.error,
             })
+            # S3-03 (долг): завершаем plan-step, который был отложен в timelock
+            step_id = item.params.get("_plan_step_id")
+            if step_id and self.state.current_plan is not None:
+                for step in self.state.current_plan.steps:
+                    if step.id == step_id:
+                        step.status = (PlanStatus.COMPLETED
+                                       if result.status == TxStatus.CONFIRMED
+                                       else PlanStatus.FAILED)
+                        step.result = result.to_dict()
+                        break
 
     async def execute_intent(self, action: str, params: dict) -> dict:
         """Исполнение подтверждённого намерения из чата (S4-03).
@@ -645,6 +655,17 @@ class OnChainAgent:
                 if blocked is not None:
                     step.status = PlanStatus.FAILED
                     step.error = blocked.error
+                    return
+
+                # S3-03 (долг): plan-step путь проходит timelock так же, как decision-путь
+                delay = self._undo_delay(step.step_type.value, step.params)
+                if delay > 0:
+                    params = dict(step.params)
+                    params["_plan_step_id"] = step.id
+                    result = await self._schedule_with_undo(step.step_type.value, params, delay)
+                    step.status = PlanStatus.BLOCKED
+                    step.error = f"Scheduled with undo window ({delay}s)"
+                    step.result = result.to_dict()
                     return
 
             if step.step_type == StepType.READ_STATE:
