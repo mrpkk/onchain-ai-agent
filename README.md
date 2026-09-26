@@ -102,7 +102,7 @@ DEBUG=true .venv/bin/uvicorn src.api.main:app --port 8000   # из backend/
 ## 🧪 Тесты
 
 ```bash
-# Backend: 328 тестов + coverage-гейт 80%
+# Backend: 338 тестов + coverage-гейт 80%
 backend/.venv/bin/python -m pytest backend/tests -q --cov=src --cov-fail-under=80
 
 # Контракты: 56 тестов (hardhat)
@@ -134,6 +134,8 @@ Human → REST /api/v1 + WS /ws → [Dharma Engine] → [Simulation] → [Timelo
 - `docs/API.md` — перечень API (генератор `docs/generate_api_md.py`)
 - `docs/MCP.md` · `docs/MCP_TOOL_CONTRACTS.md` — MCP-сервер: подключение и контракты (генератор `docs/generate_mcp_contracts.py`)
 - `docs/X402.md` — x402-демо (тестнет): поток, запуск, честные ограничения
+- `docs/DEPLOYMENT.md` — развёртывание (dev/prod, env, адреса Sepolia)
+- `CHANGELOG.md` — релизы v2.0-alpha / v2.0-beta
 - `smart-contracts/` — Solidity 0.8.20 + Hardhat
 
 ---

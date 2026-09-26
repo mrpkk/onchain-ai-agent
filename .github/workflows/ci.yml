@@ -8,12 +8,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
+        with: { python-version: "3.14" }  # как dev-окружение: на 3.12 coverage теряет greenlet-контексты SQLAlchemy (артефакт измерения)
       - run: pip install -r backend/requirements.txt pytest
       - name: Backend tests + coverage gate (80%)
         run: |
           pip install -q pytest-cov
           python3 -m pytest backend/tests -q --cov=src --cov-fail-under=80
+      - name: Static JS syntax (node --check)
+        run: |
+          node --check backend/src/api/static/dashboard.js
+          node --check backend/src/api/static/i18n.js
       - name: SAST (bandit, medium+)
         run: |
           pip install -q bandit

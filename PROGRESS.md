@@ -34,9 +34,9 @@
 
 ## 🧭 ТЕКУЩИЙ ШАГ (обновлять при каждом слайсе)
 
-**Статус:** **P0–P4 закрыты полностью** (P4 = 10/10 после S4-09; сверх плана закрыты S4-15 SAST/dep-audit, S4-16 docs-пакет, S4-17 ops-реконсиляция). **v2.0-alpha в main** (тег, merge `4b8b7d3`). Тесты: **328 backend + 76 контрактных** (вкл. coverage-гейт 80%, bandit medium+ = 0, pip-audit = 0). Live E2E: `scripts/e2e_live.py` 13/13.
+**Статус:** **P0–P4 закрыты полностью** (P4 = 10/10 после S4-09; сверх плана закрыты S4-15 SAST/dep-audit, S4-16 docs-пакет, S4-17 ops-реконсиляция). **v2.0-alpha в main** (тег, merge `4b8b7d3`). Тесты: **338 backend + 76 контрактных** (вкл. coverage-гейт 80%, bandit medium+ = 0, pip-audit = 0). Live E2E: `scripts/e2e_live.py` 13/13.
 **Инфраструктура P5 (22.09):** **RPC ✅ работает из РФ** — `ethereum-rpc.publicnode.com` (306ms, дефолт в settings), запас `eth.drpc.org`, `1rpc.io/eth`; health показывает `rpc: ok` (реальный блок mainnet). **Foundry ✅** установлен (forge/cast/anvil 1.8.1, up to date). **4337 — локальный EntryPoint** (решение владельца). **Sepolia-деплой** — ждёт решения владельца («зачем?» — объяснение в отчёте 22.09; вопрос «деплоим сейчас/после P5»).
-**P6 ЗАКРЫТ 5/5 (23.09):** S6-04 ✅ MCP · S6-03 ✅ Ricardian · S6-01 ✅ ERC-8004 · S6-02 ✅ Escrow · **S6-05 ✅ x402-демо (тестнет)**; реальный приём x402 (INTL) остаётся STOP-GATE. **P5 ЗАКРЫТ 7/7 (24.09):** S5-03 ✅ deploy · S5-04 ✅ EIP-1559+оракул · S5-05 ✅ private RPC+jitter · S5-07 ✅ multi-chain · S5-01 ✅ swap · S5-02 ✅ bridge · **S5-06 ✅ ERC-4337 (session keys/paymaster/recovery, live)**.
+**P6 ЗАКРЫТ 5/5 (23.09):** S6-04 ✅ MCP · S6-03 ✅ Ricardian · S6-01 ✅ ERC-8004 · S6-02 ✅ Escrow · **S6-05 ✅ x402-демо (тестнет)**; реальный приём x402 (INTL) остаётся STOP-GATE. **РЕЛИЗ v2.0-beta (24.09):** main = `3f0aa28` (мерж P5+P6), тег `v2.0-beta` на GitHub. **P5 ЗАКРЫТ 7/7 (24.09):** S5-03 ✅ deploy · S5-04 ✅ EIP-1559+оракул · S5-05 ✅ private RPC+jitter · S5-07 ✅ multi-chain · S5-01 ✅ swap · S5-02 ✅ bridge · **S5-06 ✅ ERC-4337 (session keys/paymaster/recovery, live)**.
 **STOP-GATE (ранее 6) — ЗАКРЫТЫ все:** execution-граница = тиры 0–1 симуляция (реальное — P5); PG docker ✅; DeepSeek-ключ ✅; `backend/.env` выведен из контура ✅; фронтенд A ✅; футуристики — в P7 (по решению).
 
 ---
@@ -216,6 +216,10 @@ F1 Gasless ERC-4337 · F2 Digital twin · F3 Copilot · F4 Intent-engine · F5 �
 | 38 | 2026-09-24 | **S5-06 ERC-4337**: локальный EntryPoint + session keys + paymaster + recovery; live Sepolia userOp | `aa41d8e` | 326/326 + 76 контрактных + live | **P5 закрыт 7/7** |
 | 39 | 2026-09-24 | **UX-полировка P5/P6:** панели Swap/Bridge/ERC-4337 в кокпите (котировки/действия/i18n RU-EN) | `32b1195` | 326/326 | долг swap-UI закрыт |
 | 40 | 2026-09-24 | **Долги + доки:** plan-step timelock (S3-03), API.md регенерация (75 роутов), модульный live-регресс | `15ba3d2` | 328/328 + live | S2-02/S3-03 долги закрыты |
+| 41 | 2026-09-24 | **МЕРЖ v2.0-beta в main** (по команде владельца): 33 коммита, 85 файлов (+8841/−94), тег `v2.0-beta` | `3f0aa28` | 328/328 + 76 | P0–P6 в main; ветка продолжается |
+| 42 | 2026-09-24 | **Release-гигиена:** CHANGELOG.md (alpha/beta), `docs/DEPLOYMENT.md` (dev/prod/env/адреса Sepolia), CI `node --check` статики | `93d3b64` | 328/328 | на ветке; войдёт в следующий мерж |
+| 43-прим | 2026-09-26 | **Публичный репо + аудит секретов:** репозиторий стал **публичным** (портфолио); полная git-история проверена gitleaks (`--all`, 134 коммита) — **утечек нет**; в дереве нет личных контактов; целевые паттерны (VK/TG/GigaChat/Mistral/OpenRouter/HF/ghp) по истории — 0. **Токены GitHub (в ~/.env и ~/.git-credentials) невалидны (401)** — push/API приостановлены до нового токена (ручное действие владельца). main CI красный (старые requirements) — починится мержем фиксов | — | — | нужно: новый `GITHUB_TOKEN_OPENCODE` |
+| 43 | 2026-09-25 | **CI-фикс (полный разбор):** 1) requirements потерял транзитивный `cryptography` при миграции PyJWT (+ `mcp`, `eth-account`, `sqlalchemy[asyncio]`) — восстановлено; 2) на Python 3.12 coverage не видит greenlet-контексты SQLAlchemy (артефакт) → CI переведён на **3.14** (как dev); 3) gitleaks-ложные срабатывания на публичных фикстурах → `.gitleaks.toml` allowlist; 4) +10 осмысленных тестов. **CI ЗЕЛЁНЫЙ** (`380a335d`: backend 337+1skip, coverage 81.58%; contracts + Slither/Aderyn) | `b31011f`..`380a335d` | 338/338 + 76 | диагностика воспроизведена в Docker (python:3.12) |
 
 ## 💡 ИДЕИ НА ОБСУЖДЕНИЕ (новое — предлагать после отчётов)
 
