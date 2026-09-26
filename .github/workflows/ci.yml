@@ -7,6 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }  # gitleaks-action нужен before^ (не shallow)
       - uses: actions/setup-python@v5
         with: { python-version: "3.14" }  # как dev-окружение: на 3.12 coverage теряет greenlet-контексты SQLAlchemy (артефакт измерения)
       - run: pip install -r backend/requirements.txt pytest
