@@ -2,11 +2,11 @@
 
 > **Единственная точка правды о прогрессе.** Диалог не хранит состояние — оно живёт здесь.
 > **Канон-спека:** `~/Документы/work/projectBooks/OnChainKartaSPEC.md` (v3, судья-синтез 5 моделей) · **Эталон:** `OnChain_AI_Agent_MODERNIZATION.md` · **Книга:** `OnChain_AI_Agent.md`
-> **Репозиторий:** `/home/iamthat/onchain-ai-agent` · **Ветка:** `feature/v2-modernization` (main заморожен до мержа)
+> **Репозиторий:** `/media/Sruti/iamthat/work/onchain-ai-agent` · **Ветка:** `feature/v2-modernization` (main заморожен до мержа)
 > **Правило старта:** слайс исполняется ТОЛЬКО после прямой команды владельца («запускай S1-01»). Обсуждение ≠ команда (прецедент 16.09).
 > **Формат слайса:** код + тест + docs + зелёный прогон + отметка здесь (хэш) + коммит (`<type>(<scope>): <subject>`) + push.
 > **Легенда:** `[ ]` todo · `[~]` in progress · `[x]` done (hash) · `[!]` blocked (причина).
-> **🆕 Канон v4 (26.10.2026):** `/home/iamthat/Документы/work/projectBooks/KartaSPEC_v4.md` — production и go-to-market.
+> **🆕 Канон v4 (26.10.2026):** `/media/Sruti/iamthat/work/projectBooks/KartaSPEC_v4.md` — production и go-to-market.
 > v3 остаётся технической базой; v4 определяет продукт, рынок, прайс, слайсы S1–S9 и стоп-лист.
 > Главная цель всех сессий (AGENTS.md): **$1M крипто к 22.11.2026**; KARTA — продукт №1 этого трека.
 
