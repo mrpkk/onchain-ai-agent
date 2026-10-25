@@ -25,7 +25,7 @@ AP2 → FIDO Alliance, UCP, ACP, EMVCo draft, AWS AgentCore Payments GA), а с�
 | # | Слайс | Срок | Готово, когда | Статус |
 |---|---|---|---|---|
 | S1 | Публичное демо «политика решает» (`/demo`, read-only) | 27–28.10 | 3 сценария воспроизводятся снаружи | `[x]` `12ee27d` |
-| S2 | Конверт задачи в API+MCP (`open_envelope`/`check_spend`) | 29–30.10 | 100 параллельных → ровно 50 разрешено | `[x]` `df9bd90` (API+ledger; MCP-инструмент — S2b) |
+| S2 | Конверт задачи в API+MCP (`open_envelope`/`check_spend`) | 29–30.10 | 100 параллельных → ровно 50 разрешено | `[x]` `df9bd90` (API+ledger) + `e68de4d` (S2b public MCP) |
 | S3 | Kill-switch + evidence-пакет | 31.10–1.11 | остановка ≤2 с, пакет проверяется офлайн | `[ ]` |
 | S4 | x402-guard (отказ на границе бюджета) | 2–4.11 | сценарий 41 000 вызовов обрывается | `[ ]` |
 | S5 | Квитанция Ed25519 + `/verify` | 5–7.11 | проверка при выключенном сервере | `[ ]` |
@@ -71,8 +71,22 @@ G6 юрлицо · G7 имя (полный список — SPEC v4 §14).
 **Живой API:** `POST https://karta.rta.lat/api/v1/envelopes` → `.../spend` (проверено снаружи).
 **Честно:** квитанция пока с `signed: false` — только `payload_sha256`; Ed25519 — слайс S5.
 Не выдаём хэш за подпись.
-**Остаток:** MCP-инструмент `check_spend` (S2b) — публичный stateless-сервер, отдельно от
-аутентифицированного `backend/src/mcp` (там read-only tools в скоупе агента).
+**Остаток:** закрыт в S2b ниже.
+
+#### S2b — публичный stateless `check_spend` MCP (26.10, `e68de4d`)
+
+**Боль:** агенту нужен zero-setup способ спросить «конверт разрешает этот расход?» — без API-ключа,
+кошелька и записи в БД.
+**Сделано:** `backend/src/demo/spend_mcp.py` — отдельный `MCPServer` `karta-spend`, инструмент
+`check_spend`; тот же `evaluate()` E01–E07; никакого состояния, платежа, БД или доступа к чужим данным.
+**Живой адрес:** <https://rta.lat/karta/mcp> (POST, JSON-RPC; без auth). Точная точка без 307:
+`/karta/mcp`, не только `/karta/mcp/`.
+**Проверено снаружи:** `initialize` → `karta-spend 0.1.0`; `tools/list` → `check_spend`;
+`tools/call` 41 000 вызовов → `BLOCK/E05`, `20.5x the cap`.
+**DoD:** 5 новых тестов (`backend/tests/test_public_spend_mcp.py`); полный backend **357 passed**.
+**Деньги:** 0 → 0 (инструмент бесплатный, вход в воронку). **Метрика:** вызовы `check_spend` и
+дошедшие до `BLOCK`/`ALLOW` — считать в `karta-demo` metrics после следующего слайса.
+**Риск/откат:** публичный stateless-эндпоинт без средств и записи; откат — снять mount.
 
 ---
 
