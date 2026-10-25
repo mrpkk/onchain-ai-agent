@@ -19,6 +19,7 @@ from pathlib import Path
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from ..security import ledger
 from ..security.envelope import Envelope, SpendRequest, evaluate
 
 PREFIX = os.getenv("KARTA_PREFIX", "").rstrip("/")
@@ -154,6 +155,81 @@ async def check(request: Request) -> JSONResponse:
     })
 
 
+# --- Публичный API конвертов (S2) -------------------------------------------
+_CREATES: dict[str, list[float]] = {}
+_CREATE_LIMIT = 10
+_CREATE_WINDOW = 60.0
+
+
+def _limited(ip: str) -> bool:
+    now = time.time()
+    hits = [t for t in _CREATES.get(ip, []) if now - t < _CREATE_WINDOW]
+    if len(hits) >= _CREATE_LIMIT:
+        _CREATES[ip] = hits
+        return True
+    hits.append(now)
+    _CREATES[ip] = hits
+    return False
+
+
+def _error(code: str, message: str, status: int, hint: str = "") -> JSONResponse:
+    return JSONResponse({"error": {"code": code, "message": message,
+                                   "retryable": status >= 500,
+                                   "suggested_action": hint}}, status_code=status)
+
+
+@router.post("/api/v1/envelopes")
+async def create_envelope(request: Request) -> JSONResponse:
+    ip = request.client.host if request.client else "?"
+    if _limited(ip):
+        return _error("rate_limited", "10 envelopes per minute", 429, "wait a minute")
+    body = await request.json()
+    try:
+        envelope = ledger.create(
+            budget_total=ledger.parse_decimal(body.get("budget_total"), "budget_total"),
+            per_call_max=ledger.parse_decimal(body.get("per_call_max", "0"), "per_call_max"),
+            calls_max=int(body.get("calls_max", 0)),
+            allowlist=tuple(str(x).lower() for x in body.get("allowlist", [])),
+            allow_new_payee=bool(body.get("allow_new_payee", False)),
+            allow_subscriptions=bool(body.get("allow_subscriptions", False)),
+            approval_threshold=(ledger.parse_decimal(body["approval_threshold"],
+                                                     "approval_threshold")
+                                if body.get("approval_threshold") is not None else None),
+            ttl_hours=max(1, min(int(body.get("ttl_hours", 24)), 168)),
+        )
+    except (ValueError, TypeError) as exc:
+        return _error("invalid_envelope", str(exc), 400, "POST /api/v1/envelopes")
+    return JSONResponse(envelope, status_code=201)
+
+
+@router.get("/api/v1/envelopes/{envelope_id}")
+def read_envelope(envelope_id: str) -> JSONResponse:
+    env = ledger.get(envelope_id)
+    if env is None:
+        return _error("not_found", "envelope not found", 404, "POST /api/v1/envelopes")
+    return JSONResponse(env)
+
+
+@router.post("/api/v1/envelopes/{envelope_id}/spend")
+async def spend(envelope_id: str, request: Request) -> JSONResponse:
+    body = await request.json()
+    try:
+        amount = ledger.parse_decimal(body.get("amount"), "amount")
+    except ValueError as exc:
+        return _error("invalid_request", str(exc), 400, "amount is decimal, e.g. 0.05")
+    verdict, receipt = ledger.reserve(
+        envelope_id, amount=amount, payee=str(body.get("payee", "")),
+        is_subscription=bool(body.get("is_subscription", False)))
+    state = ledger.get(envelope_id)
+    if state is None:
+        return _error("not_found", "envelope not found", 404, "POST /api/v1/envelopes")
+    _record({"ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+             "scenario": "api_spend", "verdict": verdict.verdict, "rule": verdict.rule,
+             "ref": request.query_params.get("ref", "api"),
+             "evidence": (receipt or {}).get("receipt_id", "")})
+    return JSONResponse({"verdict": verdict.to_dict(), "receipt": receipt, "envelope": state})
+
+
 PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>KARTA — the policy decides, not the model</title>
@@ -212,6 +288,7 @@ fetch(P+'/api/scenarios').then(r=>r.json()).then(list=>{
 
 
 def create_app(prefix: str = PREFIX) -> FastAPI:
+    ledger.init()
     app = FastAPI(title="KARTA demo", docs_url=None, redoc_url=None)
     app.include_router(router, prefix=prefix)
 
