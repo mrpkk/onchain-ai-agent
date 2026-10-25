@@ -288,13 +288,29 @@ fetch(P+'/api/scenarios').then(r=>r.json()).then(list=>{
 
 
 def create_app(prefix: str = PREFIX) -> FastAPI:
+    from contextlib import asynccontextmanager
+    from .spend_mcp import spend_mcp_dispatcher
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        async with spend_mcp_dispatcher.lifespan():
+            yield
+
     ledger.init()
-    app = FastAPI(title="KARTA demo", docs_url=None, redoc_url=None)
+    app = FastAPI(title="KARTA demo", docs_url=None, redoc_url=None, lifespan=lifespan)
     app.include_router(router, prefix=prefix)
+    app.mount(f"{prefix}/mcp" if prefix else "/mcp", spend_mcp_dispatcher)
+    if prefix:  # поддомен обслуживает те же маршруты с корня
+        app.include_router(router)
 
     @app.get(prefix or "/", response_class=HTMLResponse)
     def page() -> str:  # noqa: D401
         return PAGE.replace("%PREFIX%", prefix)
+
+    if prefix:
+        @app.get("/", response_class=HTMLResponse)
+        def page_root() -> str:  # noqa: D401
+            return PAGE.replace("%PREFIX%", "")
 
     @app.middleware("http")
     async def _timing(request: Request, call_next):
