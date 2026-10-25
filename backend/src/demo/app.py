@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
-from fastapi import APIRouter, FastAPI, Request
+from fastapi import APIRouter, FastAPI, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from ..security import ledger
@@ -299,7 +299,32 @@ def create_app(prefix: str = PREFIX) -> FastAPI:
     ledger.init()
     app = FastAPI(title="KARTA demo", docs_url=None, redoc_url=None, lifespan=lifespan)
     app.include_router(router, prefix=prefix)
-    app.mount(f"{prefix}/mcp" if prefix else "/mcp", spend_mcp_dispatcher)
+
+    from starlette.routing import Route as _Route
+    mount_path = f"{prefix}/mcp" if prefix else "/mcp"
+
+    async def _mcp_forward(request: Request) -> Response:
+        """Exact POST mount_path without a 307 redirect."""
+        scope = dict(request.scope)
+        scope["path"] = "/"
+        messages: list[dict] = []
+
+        async def _send(message: dict) -> None:
+            messages.append(message)
+
+        await spend_mcp_dispatcher(scope, request.receive, _send)
+        start = next(m for m in messages if m["type"] == "http.response.start")
+        body = b"".join(
+            m.get("body", b"") for m in messages if m["type"] == "http.response.body"
+        )
+        headers = {k.decode(): v.decode() for k, v in start.get("headers", [])}
+        return Response(content=body, status_code=start["status"], headers=headers)
+
+    app.router.routes.append(
+        _Route(mount_path, endpoint=_mcp_forward,
+               methods=["POST", "GET", "DELETE", "OPTIONS"])
+    )
+    app.mount(mount_path, spend_mcp_dispatcher)
     if prefix:  # поддомен обслуживает те же маршруты с корня
         app.include_router(router)
 

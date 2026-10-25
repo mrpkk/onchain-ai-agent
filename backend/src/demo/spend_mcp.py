@@ -153,9 +153,9 @@ class SpendMCPDispatcher:
             json_response=True,
             transport_security=TransportSecuritySettings(
                 enable_dns_rebinding_protection=True,
-                allowed_hosts=["localhost", "127.0.0.1", "rta.lat", "karta.rta.lat"],
+                allowed_hosts=["localhost", "127.0.0.1", "testserver", "rta.lat", "karta.rta.lat"],
                 allowed_origins=[
-                    "http://localhost", "http://127.0.0.1",
+                    "http://localhost", "http://127.0.0.1", "http://testserver",
                     "https://rta.lat", "https://karta.rta.lat",
                 ],
             ),
