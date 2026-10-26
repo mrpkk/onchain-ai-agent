@@ -252,3 +252,80 @@ PILOT_HI_BODY = """
 <a class="cta" href="mailto:hello@rta.lat?subject=KARTA%20pilot%20(India)">पायलट शुरू करें</a>
 <a class="cta" href="/">डेमो देखें</a>
 """
+
+
+DECK_BODY = """
+<h1>KARTA — spend control for AI agents</h1>
+<p class="dim">A one-page deck for a licence conversation. Every number here is checkable.</p>
+
+<h2>1. The problem</h2>
+<p>Agents now hold wallets and pay per call. The rails are solved: x402 went to the Linux Foundation,
+AP2 to the FIDO Alliance, UCP and ACP cover checkout, EMVCo published a draft. Every one of them
+answers <i>can this payment be verified</i>. None answers <i>should this agent spend this money on
+this task, now</i>.</p>
+
+<h2>2. The evidence</h2>
+<table>
+<tr><th>Fact</th><th>Number</th></tr>
+<tr><td>Agent paid calls in one weekend from a pagination bug, every payment valid</td><td>41 000</td></tr>
+<tr><td>Hidden text changed an AP2 agent's cart in tests</td><td>56 %</td></tr>
+<tr><td>Vendors documenting a kill switch (of 47 checked)</td><td>11</td></tr>
+<tr><td>MCP registry servers that move money (of 2 500)</td><td>72</td></tr>
+<tr><td>…of those, mentioning a kill switch or a per-task budget</td><td><b>0</b></td></tr>
+</table>
+<p class="dim">Source: our registry survey, 26.10.2026 — reproducible with one script in the repository.</p>
+
+<h2>3. What we built</h2>
+<p>One signed envelope per task: budget, allowlisted payees, no subscriptions, expiry, owner, cost
+centre. The decision is made outside the model — the gateway holds the key, the agent only asks.
+A kill switch stops one agent in under two seconds. Every spend returns an Ed25519 receipt a third
+party verifies offline.</p>
+
+<h2>4. Proof, not slides</h2>
+<table>
+<tr><th>Invariant</th><th>Result</th></tr>
+<tr><td>100 parallel spends against a 50 × $0.05 budget</td><td>exactly 50 approved</td></tr>
+<tr><td>1 000 calls at $0.01 against a $5 budget</td><td>exactly 500 approved</td></tr>
+<tr><td>Injected payee, poisoned tool, runaway loop</td><td>all refused, reproducible in minutes</td></tr>
+<tr><td>Automated tests</td><td>407 passing</td></tr>
+</table>
+
+<h2>5. The market</h2>
+<p>Every rail is adding budgets one at a time: AWS AgentCore Payments has session caps, Cloudflare
+Wallets has allowances, Stripe and Ramp issue per-agent cards. Each limits its own rail and none
+knows what the others already spent on the same task. The cross-rail task envelope is the missing
+object.</p>
+
+<h2>6. Who buys</h2>
+<p>Agent platforms (white-label guard), crypto protocols with a treasury (policy + evidence),
+teams whose agents pay for data and APIs (pilot, then Team plan).</p>
+
+<h2>7. Business model</h2>
+<table>
+<tr><th>Tier</th><th>Price</th></tr>
+<tr><td>Open</td><td>$0 — 20 checks/day, MCP, self-host</td></tr>
+<tr><td>Team</td><td>$99/month ($49 India)</td></tr>
+<tr><td>Pilot</td><td>$2 500 — 30 days, written review</td></tr>
+<tr><td>Enterprise</td><td>from $25 000/year, white-label</td></tr>
+<tr><td>Perpetual licence / asset purchase</td><td>$50 000–150 000 / $150 000–1 000 000</td></tr>
+</table>
+
+<h2>8. Traction — honestly</h2>
+<p>Pre-revenue. No paying customers. 33 personalised letters to platforms, wallet providers and
+payment sellers, zero replies at the time of writing. Six distribution channels (official MCP
+registry, Docker catalogue entry, mcpservers.org, mcp.directory, awesome-mcp-servers PR, Glama
+pending). What exists is working software, reproducible tests and a live demo — not revenue.</p>
+
+<h2>9. Why it is defensible</h2>
+<p>Not the policy file — the evidence chain: mandate → action → spend → receipt, cross-rail,
+verifiable by someone who trusts neither party. That chain is running and tested; a buyer starting
+today needs three to six months to reach parity.</p>
+
+<h2>10. The ask</h2>
+<p>One of three: a 30-day pilot for one team ($0), a licence conversation with whoever owns agent
+payments at your company, or one introduction to a team whose agents already pay.</p>
+
+<a class="cta" href="mailto:hello@rta.lat?subject=KARTA%20deck">Write to us</a>
+<a class="cta" href="/report">See the survey</a>
+<a class="cta" href="/attacks">Run the attacks</a>
+"""

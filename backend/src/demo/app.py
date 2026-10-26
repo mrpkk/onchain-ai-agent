@@ -758,7 +758,7 @@ E07 above_approval_threshold · E08 envelope_killed (reserved)
 Pre-revenue. No paying customers. The invariant is proven by tests: 100 parallel spend requests
 against a 50 x $0.05 budget produce exactly 50 approvals. Mainnet payment execution is disabled.
 
-Pages: https://karta.rta.lat/attacks (three reproducible attacks), https://karta.rta.lat/pilot (30 days free), https://karta.rta.lat/hi/pilot (Hindi)
+Pages: https://karta.rta.lat/attacks (three reproducible attacks), https://karta.rta.lat/pilot (30 days free), https://karta.rta.lat/hi/pilot (Hindi), https://karta.rta.lat/deck (one-page deck)
 Source: https://github.com/mrpkk/onchain-ai-agent (branch feature/v2-modernization)
 Contact: hello@rta.lat
 """
@@ -776,6 +776,13 @@ Contact: hello@rta.lat
 
         return shell("KARTA pilot — 30 days, free", PILOT_BODY, path="/pilot",
               description="30 days free for teams whose agents pay: one envelope, the guard, a kill-switch drill and a written review. No lock-in.")
+
+    @app.get(f"{prefix}/deck", response_class=HTMLResponse)
+    def deck_page() -> str:  # noqa: D401
+        from .pages import DECK_BODY, shell
+
+        return shell("KARTA — one-page deck", DECK_BODY, path="/deck",
+                     description="Spend control for AI agents: problem, evidence, product, proof, pricing, honest traction.")
 
     @app.get(f"{prefix}/hi/pilot", response_class=HTMLResponse)
     def pilot_hi_page() -> str:  # noqa: D401
@@ -799,6 +806,7 @@ Contact: hello@rta.lat
               description="How KARTA differs from spendshield, toolwrit, DashClaw and agentic-wallet-guardian — quoted from their own descriptions.")
 
     if prefix:  # поддомен обслуживает те же страницы с корня
+        app.add_api_route("/deck", deck_page, response_class=HTMLResponse)
         app.add_api_route("/hi/pilot", pilot_hi_page, response_class=HTMLResponse)
         app.add_api_route("/report", report_page, response_class=HTMLResponse)
         app.add_api_route("/compare", compare_page, response_class=HTMLResponse)
@@ -832,6 +840,7 @@ Contact: hello@rta.lat
                 "<url><loc>https://karta.rta.lat/attacks</loc></url>"
                 "<url><loc>https://karta.rta.lat/pilot</loc></url>"
                 "<url><loc>https://karta.rta.lat/hi/pilot</loc></url>"
+                "<url><loc>https://karta.rta.lat/deck</loc></url>"
                 "</urlset>")
         return Response(content=body, media_type="application/xml")
 
