@@ -142,3 +142,42 @@ payment was inside the task budget, that is the gap we fill.</p>
 <a class="cta" href="/pilot">Run a 30-day pilot</a>
 <a class="cta" href="/attacks">See the three attacks</a>
 """
+
+
+REPORT_BODY = """
+<h1>What agent tools say about money</h1>
+<p class="dim">A survey of the official MCP registry, 26.10.2026. Reproducible from the repository.</p>
+
+<p>We read the public description of the first 2 500 servers in the registry and separated the ones
+that describe a payment, wallet or x402 function.</p>
+
+<table>
+<tr><th>Measure</th><th>Count</th></tr>
+<tr><td>Servers in the sample</td><td>2 500</td></tr>
+<tr><td>Describe a payment, wallet or x402 function</td><td><b>72</b></td></tr>
+<tr><td>…mention a budget</td><td>11</td></tr>
+<tr><td>…mention a limit or a cap</td><td>0</td></tr>
+<tr><td>…mention a kill switch or emergency stop</td><td><b>0</b></td></tr>
+<tr><td>…describe a per-task budget</td><td><b>0</b></td></tr>
+<tr><td>…mention a receipt</td><td>2</td></tr>
+<tr><td>…mention an audit trail</td><td>0</td></tr>
+</table>
+
+<p>The 2 500 descriptions mention "approval" 65 times and "audit" 26 times overall — but almost none
+of those are in the payment group. The tools that move money describe what they pay for, not what
+stops them.</p>
+
+<h2>Honest limits</h2>
+<p><b>Descriptions are marketing text.</b> Absence of the word "kill switch" does not prove absence of
+the feature — it proves the vendor does not consider it worth a line, which is itself a signal.
+The sample is 2 500 of a larger, changing registry; the filter is lexical; we did not call the
+servers, we read what they publish.</p>
+
+<h2>Why publish it</h2>
+<p>Because the number is checkable. Nine lines of Python over a public API, snapshot date included in
+the repository — anyone can re-run it and get their own count. If your tool does have limits, write
+them in the description: buyers cannot see what is not written.</p>
+
+<a class="cta" href="/pilot">Run a 30-day pilot</a>
+<a class="cta" href="/compare">Compare with other guards</a>
+"""

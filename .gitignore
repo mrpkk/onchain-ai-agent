@@ -11,3 +11,4 @@ node_modules/
 __pycache__/
 smart-contracts/artifacts/
 smart-contracts/cache/
+scripts/registry_snapshot.json

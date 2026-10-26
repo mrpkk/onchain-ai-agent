@@ -765,6 +765,12 @@ Contact: hello@rta.lat
 
         return shell("KARTA pilot — 30 days, free", PILOT_BODY)
 
+    @app.get(f"{prefix}/report", response_class=HTMLResponse)
+    def report_page() -> str:  # noqa: D401
+        from .pages import REPORT_BODY, shell
+
+        return shell("What agent tools say about money — registry survey", REPORT_BODY)
+
     @app.get(f"{prefix}/compare", response_class=HTMLResponse)
     def compare_page() -> str:  # noqa: D401
         from .pages import COMPARE_BODY, shell
@@ -772,6 +778,7 @@ Contact: hello@rta.lat
         return shell("KARTA vs other agent spend guards", COMPARE_BODY)
 
     if prefix:  # поддомен обслуживает те же страницы с корня
+        app.add_api_route("/report", report_page, response_class=HTMLResponse)
         app.add_api_route("/compare", compare_page, response_class=HTMLResponse)
         app.add_api_route("/attacks", attacks_page, response_class=HTMLResponse)
         app.add_api_route("/pilot", pilot_page, response_class=HTMLResponse)
