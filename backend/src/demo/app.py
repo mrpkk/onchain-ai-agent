@@ -21,7 +21,7 @@ from pathlib import Path
 from fastapi import APIRouter, FastAPI, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from ..security import evidence, killswitch, ledger
+from ..security import evidence, killswitch, ledger, x402
 from ..security.envelope import Envelope, SpendRequest, evaluate
 
 PREFIX = os.getenv("KARTA_PREFIX", "").rstrip("/")
@@ -284,6 +284,50 @@ def read_envelope(envelope_id: str) -> JSONResponse:
     if env is None:
         return _error("not_found", "envelope not found", 404, "POST /api/v1/envelopes")
     return JSONResponse(env)
+
+
+@router.post("/api/v1/x402/check")
+async def x402_check(request: Request) -> JSONResponse:
+    """S4: decide whether a 402 challenge is inside the task envelope.
+
+    No network call, no payment. A real x402 client may execute only after
+    this returns ALLOW; the demo never holds funds.
+    """
+    stopped = _killed()
+    if stopped is not None:
+        return stopped
+    body = await request.json()
+    envelope_id = str(body.get("envelope_id", ""))
+    state = ledger.get(envelope_id)
+    if state is None:
+        return _error("not_found", "envelope not found", 404,
+                      "POST /api/v1/envelopes")
+    try:
+        challenge = x402.parse_challenge(body.get("challenge") or {})
+    except x402.ChallengeError as exc:
+        return _error("invalid_challenge", str(exc), 400,
+                      "send a valid x402 accepts[0] object")
+    verdict, receipt = ledger.reserve(
+        envelope_id, amount=challenge.amount, payee=challenge.payee,
+        is_subscription=bool(body.get("is_subscription", False)))
+    state = ledger.get(envelope_id)
+    _record({"ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+             "scenario": "x402_guard", "verdict": verdict.verdict,
+             "rule": verdict.rule, "ref": request.query_params.get("ref", "api"),
+             "evidence": (receipt or {}).get("receipt_id", "")})
+    return JSONResponse({
+        "verdict": verdict.to_dict(),
+        "challenge": {
+            "scheme": challenge.scheme,
+            "network": challenge.network,
+            "asset": challenge.asset,
+            "amount": str(challenge.amount),
+            "payee": challenge.payee,
+            "resource": challenge.resource,
+        },
+        "receipt": receipt,
+        "envelope": state,
+    })
 
 
 @router.post("/api/v1/envelopes/{envelope_id}/spend")
