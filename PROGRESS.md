@@ -160,6 +160,12 @@ EIP-681 `payment_uri`, адрес Base-USDC, срок 72 ч. Токен и ад�
 GitHub-токены в `~/.env` не имеют права на pull request в чужой репозиторий (403). Ссылка на
 создание PR подготовлена с заголовком и телом: `/tmp/opencode/pr-url.txt`. Нужен один клик владельца.
 
+**Сделано 26.10 (каталоги, продолжение):** KARTA подан в **mcpservers.org** через форму (headless):
+ответ сайта — «Your MCP server "KARTA" has been submitted successfully. Review within 2 weeks».
+Поля: категория Finance, repo/сайт, registry name `lat.rta.karta/guard`, remote URL `https://karta.rta.lat/mcp`.
+Итого каналов: официальный реестр (активен), mcp.directory (модерация), mcpservers.org (модерация 2 нед.),
+awesome-mcp-servers (PR #17697, ждёт индексации Glama).
+
 **Проверка PR #17697 (26.10):** бот awesome-mcp-servers требует, чтобы сервер был **оценён Glama**
 (бейдж сейчас отдаёт «This MCP server is not listed on Glama»). Причина: Glama ещё не проиндексировал
 репозиторий — attest и drift там есть, KARTA нет. Добавлен `glama.json` (claim) в ветку и в `main`
