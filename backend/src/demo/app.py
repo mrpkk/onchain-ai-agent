@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import hashlib
 import html
+import hashlib
 import json
 import os
+import re
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -27,6 +29,8 @@ from ..security.envelope import Envelope, SpendRequest, evaluate
 PREFIX = os.getenv("KARTA_PREFIX", "").rstrip("/")
 EVENTS = Path(os.getenv("KARTA_DEMO_EVENTS",
                         str(Path.home() / ".local/share/karta-demo/events.jsonl")))
+PILOTS = Path(os.getenv("KARTA_PILOTS",
+                        str(Path.home() / ".local/share/karta-demo/pilot-requests.jsonl")))
 NOW = datetime.now(timezone.utc)
 
 # Сценарии — из реальных случаев (SPEC v4 §2.2), не выдуманные.
@@ -114,6 +118,41 @@ def _killed() -> JSONResponse | None:
                   "wait for the operator to resume")
 
 
+_EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s]{2,24}$")
+
+
+@router.post("/api/v1/pilot-requests")
+async def pilot_request(request: Request) -> JSONResponse:
+    """Заявка на бесплатный пилот. Храним только то, что человек сам прислал."""
+    stopped = _killed()
+    if stopped is not None:
+        return stopped
+    ip = request.client.host if request.client else "?"
+    if _limited(ip):
+        return _error("rate_limited", "too many requests", 429, "try again later")
+    body = await request.json()
+    email = str(body.get("email", "")).strip()
+    if not _EMAIL_RE.match(email):
+        return _error("invalid_email", "a valid email is required", 400,
+                      "send email like name@company.com")
+    record = {
+        "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "id": "pilot_" + uuid.uuid4().hex[:12],
+        "email": email,
+        "name": str(body.get("name", "")).strip()[:120],
+        "platform": str(body.get("platform", "")).strip()[:200],
+        "scenario": str(body.get("scenario", "")).strip()[:500],
+        "ref": request.query_params.get("ref", "direct")[:40],
+        "ip_hash": hashlib.sha256(ip.encode()).hexdigest()[:16],
+    }
+    PILOTS.parent.mkdir(parents=True, exist_ok=True)
+    with PILOTS.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+    _record({"ts": record["ts"], "scenario": "pilot_request", "verdict": "LEAD",
+             "rule": "S7", "ref": record["ref"], "evidence": record["id"]})
+    return JSONResponse({"id": record["id"], "status": "received"}, status_code=201)
+
+
 @router.get("/health")
 def health() -> dict:
     return {"status": "ok", "service": "karta-demo", "scenarios": len(SCENARIOS),
@@ -149,6 +188,54 @@ def sample_receipt() -> JSONResponse:
                                 payee="api.example.com")
     return JSONResponse(receipt or {})
 
+
+PRICING_PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>KARTA — pricing</title>
+<style>body{background:#0b0d10;color:#e8e6e3;font:16px/1.6 system-ui,sans-serif;max-width:900px;margin:0 auto;padding:32px 20px}
+table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #22272e;padding:10px;text-align:left}
+th{color:#8b949e}.price{color:#3fb950;font-weight:700}.dim{color:#8b949e}a{color:#7fd1b9}
+.panel{background:#11151a;border:1px solid #22272e;border-radius:10px;padding:16px;margin:18px 0}</style>
+</head><body>
+<h1>KARTA pricing</h1>
+<p class="dim">One price table. No per-call price as a business model. No custody, no token.</p>
+<table><tr><th>Tier</th><th>Price</th><th>What</th></tr>
+<tr><td>Open</td><td class="price">$0</td><td>MCP, 20 checks/day, demo, local run</td></tr>
+<tr><td>Team</td><td class="price">$99/mo (India $49)</td><td>hosted control plane, 5,000 checks/mo, 5 envelopes, evidence export</td></tr>
+<tr><td>Pilot</td><td class="price">$2,500 one-time</td><td>14 days: install, 3 policies, 1 integration, findings report, 30 days support</td></tr>
+<tr><td>Enterprise</td><td class="price">from $25,000/year</td><td>white-label, SSO, private deployment, 5 checks in one entry, SLA</td></tr>
+<tr><td>Retainer</td><td class="price">$1,500/mo</td><td>monthly reconciliation, new rules, incident review</td></tr></table>
+<div class="panel"><b>Payment:</b> USDC invoice on Base, verified from chain logs; no card checkout is claimed.
+Pilot starts after a written scope. <a href="mailto:maxim.pkk@gmail.com?subject=KARTA%20pilot">Request a pilot</a>.</div>
+<p><a href="/karta">Demo</a> · <a href="/karta/enterprise">Enterprise pack</a> · <a href="/karta/verify">Verify a receipt</a></p>
+</body></html>"""
+
+ENTERPRISE_PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>KARTA — enterprise security pack</title>
+<style>body{background:#0b0d10;color:#e8e6e3;font:16px/1.6 system-ui,sans-serif;max-width:900px;margin:0 auto;padding:32px 20px}
+h2{margin-top:28px}table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #22272e;padding:8px;text-align:left;vertical-align:top}
+th{color:#8b949e}.dim{color:#8b949e}a{color:#7fd1b9}.badge{color:#3fb950;font-weight:700}</style>
+</head><body>
+<h1>KARTA enterprise pack</h1>
+<p class="dim">12 questions a platform or issuer asks before a pilot. No SOC 2, ISO 27001, or regulatory approval is claimed.</p>
+<table>
+<tr><th>#</th><th>Question</th><th>Answer as built</th></tr>
+<tr><td>1</td><td>Who owns keys?</td><td>Gateway, never the model; KeyVault/Fernet; no key in prompt, log or receipt.</td></tr>
+<tr><td>2</td><td>Where is policy enforced?</td><td>Deterministic Dharma/envelope outside the model; rule id with every verdict.</td></tr>
+<tr><td>3</td><td>Can the model override a block?</td><td>No; only a human approval surface can change the outcome.</td></tr>
+<tr><td>4</td><td>What if the model is compromised?</td><td>Task envelope caps budget, per-call, calls, payees, subscriptions, expiry.</td></tr>
+<tr><td>5</td><td>How do you stop an agent?</td><td>Operator kill switch; demo/API/MCP return 503; runtime hard kill; no auto-resume.</td></tr>
+<tr><td>6</td><td>Where is the audit log?</td><td>Sakshi append-only HMAC chain; JSON/CSV export.</td></tr>
+<tr><td>7</td><td>How can we verify without trusting you?</td><td>Ed25519 receipts and evidence; browser <a href="/karta/verify">/verify</a>; server can be offline.</td></tr>
+<tr><td>8</td><td>What data leaves?</td><td>Demo metrics only; no keys or prompts. Hosted retention by DPA.</td></tr>
+<tr><td>9</td><td>Blast radius of one task?</td><td>One envelope: budget, per-call, calls, allowlist, commitments, expiry.</td></tr>
+<tr><td>10</td><td>Multi-tenant isolation?</td><td>API/MCP scoped to owner key; foreign agent ids 404; public demo stateless.</td></tr>
+<tr><td>11</td><td>SLA?</td><td>Draft 99.5% monthly, 1-business-day response, 48h incident report; not measured; legal review.</td></tr>
+<tr><td>12</td><td>Certifications?</td><td>None claimed; controls, logs, receipts and threat model for your review.</td></tr>
+</table>
+<h2>Deployment</h2><p>Public demo · hosted pilot · self-hosted Docker · embedded MCP/HTTP guard. No custody, no money transmission, no token.</p>
+<h2>SLA / DPA</h2><p class="dim">Drafts only — <b>LEGAL REVIEW REQUIRED</b>. No credits, 99.99%, “bank-grade” or regulatory approval claims.</p>
+<p><a href="mailto:maxim.pkk@gmail.com?subject=KARTA%20enterprise%20pilot">Request an enterprise pilot</a> · <a href="/karta/pricing">Pricing</a> · <a href="/karta">Demo</a></p>
+</body></html>"""
 
 VERIFY_PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -191,6 +278,16 @@ document.getElementById('sample').onclick=async()=>{
 @router.get("/verify", response_class=HTMLResponse)
 def verify_page() -> str:
     return VERIFY_PAGE
+
+
+@router.get("/pricing", response_class=HTMLResponse)
+def pricing_page() -> str:
+    return PRICING_PAGE
+
+
+@router.get("/enterprise", response_class=HTMLResponse)
+def enterprise_page() -> str:
+    return ENTERPRISE_PAGE
 
 
 @router.get("/api/v1/evidence")
@@ -508,10 +605,18 @@ def create_app(prefix: str = PREFIX) -> FastAPI:
     def page() -> str:  # noqa: D401
         return PAGE.replace("%PREFIX%", prefix)
 
+    @app.get(f"{prefix}/partners", response_class=HTMLResponse)
+    def partners_page() -> str:  # noqa: D401
+        return PARTNERS_PAGE.replace("%PREFIX%", prefix)
+
     if prefix:
         @app.get("/", response_class=HTMLResponse)
         def page_root() -> str:  # noqa: D401
             return PAGE.replace("%PREFIX%", "")
+
+        @app.get("/partners", response_class=HTMLResponse)
+        def partners_root() -> str:  # noqa: D401
+            return PARTNERS_PAGE.replace("%PREFIX%", "")
 
     @app.middleware("http")
     async def _timing(request: Request, call_next):
@@ -524,3 +629,71 @@ def create_app(prefix: str = PREFIX) -> FastAPI:
 
 
 app = create_app()
+
+
+PARTNERS_PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KARTA design partners — free pilot</title>
+<style>
+:root{--bg:#0b0d10;--fg:#e8e6e3;--dim:#8b949e;--line:#22272e;--ok:#3fb950}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);
+font:16px/1.6 -apple-system,Segoe UI,Inter,system-ui,sans-serif}
+main{max-width:760px;margin:0 auto;padding:48px 24px 72px}
+h1{font-size:32px;line-height:1.2;margin:0 0 8px;letter-spacing:-.02em}
+h2{font-size:18px;margin:28px 0 8px}
+.sub{color:var(--dim);margin:0 0 24px}
+ul{padding-left:20px}li{margin:6px 0}
+form{border:1px solid var(--line);border-radius:12px;padding:20px;background:#0f1318;margin:24px 0}
+label{display:block;font-size:14px;color:var(--dim);margin:12px 0 4px}
+input,textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;
+background:#0b0d10;color:var(--fg);font:inherit}
+button{margin-top:16px;padding:11px 18px;border:0;border-radius:8px;background:var(--ok);
+color:#04140a;font-weight:600;font-size:15px;cursor:pointer}
+small{color:var(--dim)}a{color:#79c0ff}
+.ok{border:1px solid var(--ok);border-radius:10px;padding:14px 16px;margin:16px 0;display:none}
+</style></head><body><main>
+<h1>Free 30-day design partner pilot</h1>
+<p class="sub">KARTA puts a signed task envelope around an AI agent's spending, enforced
+outside the model. We are looking for five teams that let an agent pay for APIs,
+data or other agents — and want a hard stop before it overspends.</p>
+
+<h2>What you get</h2>
+<ul>
+<li>a review of one real spend flow in your agent (calls, limits, payees);</li>
+<li>an envelope configuration you can apply the same day;</li>
+<li>a sample evidence package: every decision, stop and resume, verifiable offline;</li>
+<li>direct line to the maintainer for 30 days. No fee, no card.</li>
+</ul>
+
+<h2>What we ask</h2>
+<ul>
+<li>one call (30 min) about how your agent spends today;</li>
+<li>permission to name you as a design partner <b>only after</b> you deploy it;</li>
+<li>a short honest quote if it actually helped.</li>
+</ul>
+
+<form id="f">
+<label for="email">Work email *</label>
+<input id="email" type="email" required placeholder="name@company.com">
+<label for="name">Your name</label>
+<input id="name" placeholder="Ada">
+<label for="platform">Agent or platform</label>
+<input id="platform" placeholder="what your agent does, and what it pays for">
+<label for="scenario">One spend that worries you</label>
+<textarea id="scenario" rows="3" placeholder="e.g. our agent buys market data per call and once ran 40k calls in a night"></textarea>
+<button type="submit">Request the pilot</button>
+<small>We store your email and text locally and use it only to reply. No third-party analytics.</small>
+</form>
+<div class="ok" id="ok">Received. We reply within two business days.</div>
+<p><small>Prefer to look first? <a href="%PREFIX%/verify">Check any envelope</a> or
+<a href="%PREFIX%/../">try the live demo</a>.</small></p>
+<script>
+const f=document.getElementById('f');
+f.addEventListener('submit',async(e)=>{e.preventDefault();
+const body={email:email.value,name:name.value,platform:platform.value,scenario:scenario.value};
+const r=await fetch('%PREFIX%/api/v1/pilot-requests',{method:'POST',
+headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+if(r.ok){f.style.display='none';document.getElementById('ok').style.display='block';}
+else{const j=await r.json().catch(()=>({}));alert((j.error&&j.error.message)||'could not send');}});
+</script>
+</main></body></html>"""
