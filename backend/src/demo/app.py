@@ -765,7 +765,14 @@ Contact: hello@rta.lat
 
         return shell("KARTA pilot — 30 days, free", PILOT_BODY)
 
+    @app.get(f"{prefix}/compare", response_class=HTMLResponse)
+    def compare_page() -> str:  # noqa: D401
+        from .pages import COMPARE_BODY, shell
+
+        return shell("KARTA vs other agent spend guards", COMPARE_BODY)
+
     if prefix:  # поддомен обслуживает те же страницы с корня
+        app.add_api_route("/compare", compare_page, response_class=HTMLResponse)
         app.add_api_route("/attacks", attacks_page, response_class=HTMLResponse)
         app.add_api_route("/pilot", pilot_page, response_class=HTMLResponse)
 

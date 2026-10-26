@@ -97,3 +97,48 @@ back in USDC. No forms, no discussion.</p>
 <a class="cta" href="mailto:hello@rta.lat?subject=KARTA%20pilot">Start a pilot</a>
 <a class="cta" href="/">See the demo</a>
 """
+
+
+COMPARE_BODY = """
+<h1>How KARTA differs from other agent spend guards</h1>
+<p class="dim">Every claim about another product below is quoted from its own one-line description in
+the awesome-mcp-servers list (26.10.2026). Where a feature is not mentioned, the cell says
+"not stated" — that is not a claim that it is missing.</p>
+
+<table>
+<tr><th>Product</th><th>What it says about itself</th></tr>
+<tr><td><b>KARTA</b></td><td>Signed budget envelope <b>per task</b>, enforced outside the model,
+kill switch under two seconds, Ed25519 receipt verified offline. 406 tests, live demo.</td></tr>
+<tr><td>spendshield</td><td>"Payment guardrails for AI agents: spend caps, budget and approval gates,
+prompt-injection defense, an encrypted secret vault and an audit trail."</td></tr>
+<tr><td>agentic-wallet-guardian</td><td>"Evaluates AI agents' proposed blockchain transactions and
+returns an explainable allow, warn or block decision."</td></tr>
+<tr><td>toolwrit</td><td>"Deny-by-default tool allowlist with argument rules, call and USD budget caps,
+and a hash-chained audit log with RFC 3161 timestamp anchors."</td></tr>
+<tr><td>DashClaw</td><td>"Fail-closed approval layer for unattended agent runs: checks actions against
+org policy, requests human approval and logs every decision to a causal ledger."</td></tr>
+</table>
+
+<h2>Where the difference actually is</h2>
+<table>
+<tr><th>Capability</th><th>KARTA</th><th>Others (as described)</th></tr>
+<tr><td>Budget belongs to the <b>task</b>, not the call</td><td>yes</td>
+<td>spendshield: caps; toolwrit: call and USD caps; a pagination loop is not covered by a per-call cap</td></tr>
+<tr><td>Enforcement outside the model (agent cannot sign around it)</td><td>yes</td>
+<td>DashClaw: approval layer; others: not stated how the agent is prevented from bypassing</td></tr>
+<tr><td>Kill switch for one agent, under 2 s</td><td>yes, measured</td><td>not stated</td></tr>
+<tr><td>Receipt verified <b>offline</b> by a third party</td><td>yes, Ed25519</td>
+<td>toolwrit: hash-chained log with RFC 3161; others: audit trail, not third-party verification</td></tr>
+<tr><td>Cross-rail view (x402 + on-chain + card token)</td><td>yes, by design</td><td>not stated</td></tr>
+<tr><td>Open source you can run in ten minutes</td><td>yes</td><td>not stated</td></tr>
+</table>
+
+<h2>What this page is not</h2>
+<p>It is not a claim that those products are worse. They are solving adjacent problems, and several
+are further along commercially than we are: KARTA has no paying customers. If you need a spend cap
+today, toolwrit or spendshield may be exactly right. If you need to prove to an auditor that a
+payment was inside the task budget, that is the gap we fill.</p>
+
+<a class="cta" href="/pilot">Run a 30-day pilot</a>
+<a class="cta" href="/attacks">See the three attacks</a>
+"""
