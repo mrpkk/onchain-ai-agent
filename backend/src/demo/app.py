@@ -757,31 +757,36 @@ Contact: hello@rta.lat
     def attacks_page() -> str:  # noqa: D401
         from .pages import ATTACKS_BODY, shell
 
-        return shell("KARTA — three attacks, refused", ATTACKS_BODY)
+        return shell("KARTA — three attacks, refused", ATTACKS_BODY, path="/attacks",
+              description="Three ways an agent with a wallet loses money — and the task envelope that stops them. Reproducible in ten minutes.")
 
     @app.get(f"{prefix}/pilot", response_class=HTMLResponse)
     def pilot_page() -> str:  # noqa: D401
         from .pages import PILOT_BODY, shell
 
-        return shell("KARTA pilot — 30 days, free", PILOT_BODY)
+        return shell("KARTA pilot — 30 days, free", PILOT_BODY, path="/pilot",
+              description="30 days free for teams whose agents pay: one envelope, the guard, a kill-switch drill and a written review. No lock-in.")
 
     @app.get(f"{prefix}/hi/pilot", response_class=HTMLResponse)
     def pilot_hi_page() -> str:  # noqa: D401
         from .pages import PILOT_HI_BODY, shell
 
-        return shell("KARTA पायलट — 30 दिन, निःशुल्क", PILOT_HI_BODY)
+        return shell("KARTA पायलट — 30 दिन, निःशुल्क", PILOT_HI_BODY, path="/hi/pilot", lang="hi",
+              description="AI एजेंट के लिए खर्च नियंत्रण: प्रति कार्य बजट, किल-स्विच और ऑफ़लाइन सत्यापित रसीदें। 30 दिन निःशुल्क।")
 
     @app.get(f"{prefix}/report", response_class=HTMLResponse)
     def report_page() -> str:  # noqa: D401
         from .pages import REPORT_BODY, shell
 
-        return shell("What agent tools say about money — registry survey", REPORT_BODY)
+        return shell("What agent tools say about money — registry survey", REPORT_BODY, path="/report",
+              description="2 500 MCP servers surveyed: 72 move money, none mentions a kill switch or a per-task budget.")
 
     @app.get(f"{prefix}/compare", response_class=HTMLResponse)
     def compare_page() -> str:  # noqa: D401
         from .pages import COMPARE_BODY, shell
 
-        return shell("KARTA vs other agent spend guards", COMPARE_BODY)
+        return shell("KARTA vs other agent spend guards", COMPARE_BODY, path="/compare",
+              description="How KARTA differs from spendshield, toolwrit, DashClaw and agentic-wallet-guardian — quoted from their own descriptions.")
 
     if prefix:  # поддомен обслуживает те же страницы с корня
         app.add_api_route("/hi/pilot", pilot_hi_page, response_class=HTMLResponse)

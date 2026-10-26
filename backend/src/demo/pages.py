@@ -18,11 +18,40 @@ th{color:#8b949e;font-weight:500}a{color:#79c0ff}
 .cta:hover{border-color:#79c0ff}"""
 
 
-def shell(title: str, body: str) -> str:
+def shell(title: str, body: str, *, description: str = "", path: str = "/",
+          lang: str = "en") -> str:
+    """Одна оболочка для страниц: заголовок, описание, OG-карточка и JSON-LD.
+
+    Без этого ссылка в письме разворачивается в голый URL — а письма мы шлём именно ссылкой.
+    """
+    desc = description or ("KARTA — spend control for AI agents: a signed budget envelope per task, "
+                           "a kill switch, and receipts verified offline.")
+    url = "https://karta.rta.lat" + path
+    og = (
+        f'<meta name="description" content="{desc}">'
+        f'<meta property="og:type" content="website">'
+        f'<meta property="og:title" content="{title}">'
+        f'<meta property="og:description" content="{desc}">'
+        f'<meta property="og:url" content="{url}">'
+        f'<meta property="og:site_name" content="KARTA">'
+        f'<meta name="twitter:card" content="summary_large_image">'
+        f'<meta name="twitter:title" content="{title}">'
+        f'<meta name="twitter:description" content="{desc}">'
+    )
+    ld = (
+        '{"@context":"https://schema.org","@type":"SoftwareApplication",'
+        '"name":"KARTA","applicationCategory":"SecurityApplication",'
+        '"operatingSystem":"Any","url":"https://karta.rta.lat",'
+        '"description":"Spend control for AI agents: signed budget envelope per task, '
+        'kill switch, Ed25519 receipts verified offline.",'
+        '"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}'
+    )
     return (
-        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
-        f"<title>{title}</title><style>{SHELL_CSS}</style></head>"
+        f"<title>{title}</title>{og}"
+        f'<script type="application/ld+json">{ld}</script>'
+        f"<style>{SHELL_CSS}</style></head>"
         f"<body><main>{body}</main></body></html>"
     )
 
