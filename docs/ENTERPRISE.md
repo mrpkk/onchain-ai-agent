@@ -96,9 +96,10 @@ SOC 2, ISO 27001, or regulatory approval is claimed.
 ## Evidence sample
 
 1. Run a demo scenario at <https://rta.lat/karta>.
-2. Open `/karta/api/v1/evidence` → signed bundle.
-3. Verify with `scripts/verify_evidence.py` or the public page `/karta/evidence/<id>`.
-4. Tamper one record → the page shows **INVALID** and names the broken index.
+2. Open `/karta/api/v1/evidence` → Ed25519-signed bundle (`karta-evidence-v1`, public key inside).
+3. Open `/karta/evidence/<evidence_id>` → the same bundle rendered for a reader.
+4. Verify offline with `security.evidence.verify_evidence(bundle)` — no server, no network;
+   tamper one record → **INVALID** and the broken index.
 
 This is the artifact a buyer can put in front of an auditor without trusting KARTA’s dashboard.
 
