@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import html
 import json
 import os
 import time
@@ -19,7 +20,7 @@ from pathlib import Path
 from fastapi import APIRouter, FastAPI, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from ..security import killswitch, ledger
+from ..security import evidence, killswitch, ledger
 from ..security.envelope import Envelope, SpendRequest, evaluate
 
 PREFIX = os.getenv("KARTA_PREFIX", "").rstrip("/")
@@ -136,6 +137,32 @@ async def kill_set(request: Request) -> JSONResponse:
 @router.get("/metrics")
 def metrics() -> dict:
     return _totals()
+
+
+@router.get("/evidence/{evidence_id}", response_class=HTMLResponse)
+def evidence_page(evidence_id: str):
+    """Public, no-auth evidence viewer; the signature is verified in Python."""
+    package = evidence.load_evidence(evidence_id)
+    if package is None:
+        return HTMLResponse("<h1>Evidence not found</h1>", status_code=404)
+    valid = evidence.verify_evidence(package)
+    body = html.escape(json.dumps(package, ensure_ascii=False, indent=2))
+    badge = "VALID" if valid else "INVALID"
+    color = "#3fb950" if valid else "#f85149"
+    chain = "valid" if package.get("chain_valid") else "not verified"
+    return HTMLResponse(f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KARTA evidence — {badge}</title>
+<style>body{{background:#0b0d10;color:#e8e6e3;font:16px/1.6 system-ui,sans-serif;max-width:980px;margin:0 auto;padding:32px 20px}}
+pre{{background:#11151a;border:1px solid #22272e;border-radius:10px;padding:16px;overflow:auto}}
+b{{color:{color}}} code{{background:#171b21;padding:2px 5px;border-radius:4px}}.dim{{color:#8b949e}}</style>
+</head><body>
+<h1>KARTA evidence <b>{badge}</b></h1>
+<p>Ed25519 signature: <b>{badge}</b> · Sakshi chain: <b>{chain}</b></p>
+<p class="dim">Checked here without trusting the API. Repeat it with the public key in the JSON.</p>
+<pre>{body}</pre>
+<p class="dim">No wallet keys or secrets are included.</p>
+</body></html>""", status_code=200)
 
 
 @router.get("/api/scenarios")

@@ -90,6 +90,8 @@ from ..integrations.ricardian import RicardianError, RicardianService
 from ..integrations.swap import SwapError, SwapService
 from ..runtime.badges import compute_badges
 from ..security.apikeys import ALLOWED_SCOPES, generate_api_key
+from ..security.evidence import build_evidence, save_evidence
+from ..security.sakshi import AuditKeyMissing, SakshiLog
 from ..security.dharma import PolicyError, TxContext, build_default_policy, compile_yaml, evaluate
 from ..agent.intent import parse_intent
 from ..agent.policy_intent import build_policy_yaml, parse_policy_rule
@@ -508,7 +510,11 @@ async def kill_switch(
 ):
     async with session_scope() as session:
         agent = await _get_owned_agent(session, agent_id, current_user)
-        agent.config = {**(agent.config or {}), "kill_reason": body.reason}
+        agent.config = {
+            **(agent.config or {}),
+            "kill_reason": body.reason,
+            "killed_at": datetime.now(timezone.utc).isoformat(),
+        }
         await AgentRepository(session).set_status(agent, AgentStatus.KILLED.value)
         response = _agent_to_response(agent)
     runtime = runtime_manager.get(str(agent.id))
@@ -518,6 +524,48 @@ async def kill_switch(
     await ws_manager.broadcast({"type": "agent.status", "agent_id": str(agent.id),
                                 "status": AgentStatus.KILLED.value, "reason": body.reason})
     return response
+
+
+@app.get("/api/v1/agents/{agent_id}/evidence")
+async def agent_evidence(
+    agent_id: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    """S3: signed evidence package for a stop; safe to share, verifies offline."""
+    async with session_scope() as session:
+        agent = await _get_owned_agent(session, agent_id, current_user)
+        runtime = runtime_manager.get(str(agent.id))
+        events = []
+        chain_valid = False
+        try:
+            log = SakshiLog()
+            events = list(await log.list_events(session, agent_id=agent.id, limit=1000))
+            chain_valid = log.verify_chain(events)
+        except AuditKeyMissing:
+            # No audit key configured: the package still says chain_valid=false.
+            pass
+        killed_at = None
+        for event in events:
+            if event.event_type == "kill_switch":
+                killed_at = event.created_at
+        if killed_at is None and (agent.config or {}).get("killed_at"):
+            try:
+                killed_at = datetime.fromisoformat(str(agent.config["killed_at"]))
+            except ValueError:
+                killed_at = None
+        package = build_evidence(
+            agent_id=str(agent.id),
+            actor=str(current_user.get("username") or current_user.get("sub") or "owner"),
+            reason=str((agent.config or {}).get("kill_reason", "")),
+            status=str(agent.status),
+            killed_at=killed_at,
+            runtime_state=runtime.state.to_dict() if runtime is not None else None,
+            in_flight=runtime.timelock.pending() if runtime is not None else [],
+            audit_events=events,
+            chain_valid=chain_valid,
+        )
+        save_evidence(package)
+    return package
 
 
 @app.post("/api/v1/agents/{agent_id}/tier", response_model=AgentResponse)
