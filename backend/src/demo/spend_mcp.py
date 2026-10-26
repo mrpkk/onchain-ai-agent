@@ -20,6 +20,7 @@ from typing import Any
 from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 
+from ..security import killswitch
 from ..security.envelope import Envelope, SpendRequest, evaluate
 
 PUBLIC_TOOL = "check_spend"
@@ -119,6 +120,12 @@ async def check_spend(
     spent_so_far: str = "0",
     is_subscription: bool = False,
 ) -> str:
+    if killswitch.is_active():
+        return json.dumps({
+            "error": {"code": "KILL_SWITCH", "message": "KARTA is stopped by the operator",
+                      "retryable": True,
+                      "suggested_action": "retry after the operator resumes the service"},
+        }, ensure_ascii=False)
     try:
         return json.dumps(check_spend_payload(
             envelope=envelope,

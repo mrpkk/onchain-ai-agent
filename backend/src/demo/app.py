@@ -19,7 +19,7 @@ from pathlib import Path
 from fastapi import APIRouter, FastAPI, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from ..security import ledger
+from ..security import killswitch, ledger
 from ..security.envelope import Envelope, SpendRequest, evaluate
 
 PREFIX = os.getenv("KARTA_PREFIX", "").rstrip("/")
@@ -104,9 +104,33 @@ def _totals() -> dict:
 router = APIRouter()
 
 
+def _killed() -> JSONResponse | None:
+    """Единый отказ, пока включён kill-switch: вердиктов и трат нет."""
+    if not killswitch.is_active():
+        return None
+    return _error("kill_switch", "KARTA is stopped by the operator", 503,
+                  "wait for the operator to resume")
+
+
 @router.get("/health")
 def health() -> dict:
-    return {"status": "ok", "service": "karta-demo", "scenarios": len(SCENARIOS)}
+    return {"status": "ok", "service": "karta-demo", "scenarios": len(SCENARIOS),
+            "kill_switch": killswitch.status()}
+
+
+@router.get("/api/v1/kill")
+def kill_status() -> dict:
+    return killswitch.status()
+
+
+@router.post("/api/v1/kill")
+async def kill_set(request: Request) -> JSONResponse:
+    body = await request.json()
+    state = killswitch.set_active(bool(body.get("active", True)), str(body.get("reason", "")))
+    _record({"ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+             "scenario": "kill_switch", "verdict": "STOP" if state["active"] else "RESUME",
+             "rule": "S3", "ref": request.query_params.get("ref", "api"), "evidence": ""})
+    return JSONResponse(state)
 
 
 @router.get("/metrics")
@@ -128,6 +152,9 @@ def scenarios() -> list[dict]:
 
 @router.post("/api/check")
 async def check(request: Request) -> JSONResponse:
+    stopped = _killed()
+    if stopped is not None:
+        return stopped
     body = await request.json()
     sid = str(body.get("scenario", ""))
     scenario = SCENARIOS.get(sid)
@@ -180,6 +207,9 @@ def _error(code: str, message: str, status: int, hint: str = "") -> JSONResponse
 
 @router.post("/api/v1/envelopes")
 async def create_envelope(request: Request) -> JSONResponse:
+    stopped = _killed()
+    if stopped is not None:
+        return stopped
     ip = request.client.host if request.client else "?"
     if _limited(ip):
         return _error("rate_limited", "10 envelopes per minute", 429, "wait a minute")
@@ -199,6 +229,7 @@ async def create_envelope(request: Request) -> JSONResponse:
         )
     except (ValueError, TypeError) as exc:
         return _error("invalid_envelope", str(exc), 400, "POST /api/v1/envelopes")
+    envelope["id"] = envelope["envelope_id"]  # алиас для коротких клиентов
     return JSONResponse(envelope, status_code=201)
 
 
@@ -212,6 +243,9 @@ def read_envelope(envelope_id: str) -> JSONResponse:
 
 @router.post("/api/v1/envelopes/{envelope_id}/spend")
 async def spend(envelope_id: str, request: Request) -> JSONResponse:
+    stopped = _killed()
+    if stopped is not None:
+        return stopped
     body = await request.json()
     try:
         amount = ledger.parse_decimal(body.get("amount"), "amount")
