@@ -589,7 +589,7 @@ outside the model. Every check below is deterministic: same input, same rule, sa
 No wallet, no funds, no signup.</p>
 <div class="grid" id="grid"></div>
 <div class="out" id="out"><small>Pick a scenario. The envelope and the request are shown; the verdict is produced by the same engine the API and MCP use.</small></div>
-<p style="margin-top:28px"><small>Free tier: 20 checks a day · <a href="https://rta.lat/nidhipati/">spend audit</a> · <a href="https://attest.rta.lat/">signed receipts</a></small></p>
+<p style="margin-top:28px"><small>Free tier: 20 checks a day · <a href="https://rta.lat/nidhipati/">spend audit</a> · <a href="https://attest.rta.lat/">signed receipts</a> · <a href="mailto:hello@rta.lat?subject=KARTA%20pilot">run a 30-day pilot</a></small></p>
 </main><script>
 const P=%PREFIX%;
 async function run(id){
