@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import html
 import json
 import os
@@ -139,13 +140,30 @@ def metrics() -> dict:
     return _totals()
 
 
+@router.get("/api/v1/evidence")
+def evidence_bundle() -> JSONResponse:
+    """Signed, offline-verifiable bundle of demo events (S3)."""
+    records = evidence.load_jsonl(EVENTS) if EVENTS.exists() else []
+    bundle = evidence.build_bundle(
+        records,
+        source="karta-demo",
+        kill_switch=killswitch.status(),
+    )
+    bundle["evidence_id"] = hashlib.sha256(evidence.canonical(bundle)).hexdigest()[:16]
+    evidence.save_evidence(bundle)
+    return JSONResponse(bundle)
+
+
 @router.get("/evidence/{evidence_id}", response_class=HTMLResponse)
 def evidence_page(evidence_id: str):
     """Public, no-auth evidence viewer; the signature is verified in Python."""
     package = evidence.load_evidence(evidence_id)
     if package is None:
         return HTMLResponse("<h1>Evidence not found</h1>", status_code=404)
-    valid = evidence.verify_evidence(package)
+    if package.get("kind") == "event-bundle":
+        valid = evidence.verify_bundle(package)["ok"]
+    else:
+        valid = evidence.verify_evidence(package)
     body = html.escape(json.dumps(package, ensure_ascii=False, indent=2))
     badge = "VALID" if valid else "INVALID"
     color = "#3fb950" if valid else "#f85149"

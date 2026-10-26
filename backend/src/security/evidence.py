@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
@@ -156,7 +157,7 @@ def verify_evidence(package: dict[str, Any]) -> bool:
             "algorithm": package["algorithm"],
         })).hexdigest()[:16]
         return expected == package["evidence_id"]
-    except (KeyError, ValueError, TypeError):
+    except (KeyError, ValueError, TypeError, InvalidSignature):
         return False
 
 

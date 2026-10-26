@@ -78,3 +78,27 @@ def test_mcp_check_spend_honours_kill_switch(client):
     })
     body = resp.text
     assert "KILL_SWITCH" in body or resp.status_code in (200, 503)
+
+
+def test_evidence_bundle_verifies_offline_and_detects_tamper(client):
+    from src.security.evidence import verify_bundle
+
+    client.post("/api/check", json={"scenario": "allow"})
+    bundle = client.get("/api/v1/evidence").json()
+    result = verify_bundle(bundle)
+    assert result["ok"] is True, result
+    assert result["records"] >= 1
+
+    bundle["records"][0]["verdict"] = "TAMPERED"
+    broken = verify_bundle(bundle)
+    assert broken["ok"] is False
+    assert broken["reason"] in {"chain_broken", "signature_invalid"}
+
+
+def test_bundle_has_public_evidence_page(client):
+    client.post("/api/check", json={"scenario": "allow"})
+    bundle = client.get("/api/v1/evidence").json()
+    assert bundle["evidence_id"]
+    page = client.get(f"/evidence/{bundle['evidence_id']}")
+    assert page.status_code == 200
+    assert "VALID" in page.text
