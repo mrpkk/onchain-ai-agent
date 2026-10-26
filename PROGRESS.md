@@ -155,6 +155,13 @@ EIP-681 `payment_uri`, адрес Base-USDC, срок 72 ч. Токен и ад�
 **Сделано 26.10 (страницы):** `/attacks` и `/pilot` — публичные страницы под те же тексты,
 что в документах; в `llms.txt` и `sitemap.xml`.
 
+**Сделано 26.10 (каталоги):** KARTA подан в **mcp.directory** через форму (headless-браузер, без окон
+на экране владельца) — ответ сайта: «Server Submitted! review within 24 hours». Поля: repo, имя
+`@mrpkk/karta`, описание 71 символ, email. Ранее был только официальный реестр MCP.
+
+**Сделано 26.10 (фонды):** два письма с просьбой об **одном интро**, не о раунде — CoinFund
+(`info@coinfund.io`) и Dragonfly (`hello@dragonfly.xyz`). Адреса из публичных профилей организаций.
+
 **Сделано 26.10 (дистрибуция):** KARTA опубликован в официальном реестре MCP —
 `lat.rta.karta/guard` v0.1.0, remote `https://karta.rta.lat/mcp` (`server.json`, коммит `525df65`).
 Владение доменом подтверждено ed25519-ключом через `/.well-known/mcp-registry-auth`
