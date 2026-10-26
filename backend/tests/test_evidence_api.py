@@ -32,6 +32,7 @@ def _auth(client):
 
 def test_kill_evidence_is_signed_and_shareable(tmp_path, monkeypatch):
     monkeypatch.setattr(evidence, "DEFAULT_DIR", tmp_path)
+    monkeypatch.setenv("SAKSHI_AUDIT_KEY", "e" * 32)
     with _client() as client:
         auth = _auth(client)
         agent = client.post("/api/v1/agents", json={"name": "evidence-agent", "tier": 1},
@@ -44,6 +45,7 @@ def test_kill_evidence_is_signed_and_shareable(tmp_path, monkeypatch):
         assert package["status"] == "killed"
         assert package["reason"] == "evidence drill"
         assert package["killed_at"] is not None
+        assert any(e["event_type"] == "kill_switch" for e in package["audit_events"])
         assert evidence.verify_evidence(package) is True
         assert (tmp_path / f"{package['evidence_id']}.json").exists()
 

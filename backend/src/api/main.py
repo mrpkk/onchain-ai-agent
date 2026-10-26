@@ -516,6 +516,16 @@ async def kill_switch(
             "killed_at": datetime.now(timezone.utc).isoformat(),
         }
         await AgentRepository(session).set_status(agent, AgentStatus.KILLED.value)
+        try:
+            await SakshiLog().append(
+                session,
+                actor=str(current_user.get("username") or current_user.get("id") or "owner")[:16],
+                event_type="kill_switch",
+                payload={"reason": body.reason},
+                agent_id=agent.id,
+            )
+        except AuditKeyMissing:
+            pass
         response = _agent_to_response(agent)
     runtime = runtime_manager.get(str(agent.id))
     if runtime is not None:
