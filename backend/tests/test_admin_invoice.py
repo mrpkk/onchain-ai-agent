@@ -72,3 +72,16 @@ def test_pilot_requests_are_owner_only(client):
     body = listed.json()
     assert body["count"] >= 1
     assert "ip" not in {k.lower() for k in body["items"][0]}
+
+
+def test_invoice_page_renders_payment_link(client):
+    """Страница счёта — последняя миля: адрес, deep link и проверка tx должны быть на месте."""
+    created = client.post(P + "/api/v1/invoice", json={"amount": "2500", "memo": "pilot"},
+                          headers={"x-admin-token": TOKEN}).json()
+    page = client.get(P + f"/invoice/{created['id']}")
+    assert page.status_code == 200
+    body = page.text
+    assert created["address"] in body
+    assert "ethereum:" in body          # EIP-681 deep link для мобильного кошелька
+    assert "Copy address" in body
+    assert "Check transaction" in body

@@ -336,7 +336,9 @@ pre{{background:#11151a;border:1px solid #22272e;border-radius:8px;padding:12px;
 <p>Status: <span class="status">{html.escape(status)}</span></p>
 <table>{rows}</table>
 <p class="dim">Pay USDC on Base to the address above, exact amount. The recipient is the address in this invoice; never a chat address.</p>
-<p class="dim">Payment URI: <code>{pay}</code></p>
+<p class="dim">Payment URI (opens a wallet on mobile): <a href="{pay}"><code>{pay}</code></a></p>
+<p class="dim">Address: <code id="addr">{html.escape(str(item.get("address", "")))}</code>
+<button type="button" onclick="navigator.clipboard.writeText(document.getElementById('addr').innerText)">Copy address</button></p>
 <h2>Already paid?</h2>
 <p class="dim">Paste the Base transaction hash. The server reads the chain; if it cannot confirm, the invoice stays pending.</p>
 <input id="tx" placeholder="0x…">
