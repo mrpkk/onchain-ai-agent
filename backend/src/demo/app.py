@@ -623,6 +623,14 @@ async def spend(envelope_id: str, request: Request) -> JSONResponse:
 PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>KARTA — the policy decides, not the model</title>
+<meta name="description" content="Spend control for AI agents: a signed budget envelope per task, a kill switch, and receipts verified offline. Live demo, no signup.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="KARTA — the policy decides, not the model">
+<meta property="og:description" content="One signed envelope per task: budget, payees, expiry. Kill switch under two seconds. Receipts verified offline.">
+<meta property="og:url" content="https://karta.rta.lat/">
+<meta property="og:image" content="https://karta.rta.lat/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://karta.rta.lat/og.png">
 <style>
 :root{--bg:#0b0d10;--fg:#e8e6e3;--dim:#8b949e;--line:#22272e;--ok:#3fb950;--warn:#d29922;--bad:#f85149}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);
@@ -798,6 +806,12 @@ Contact: hello@rta.lat
     @app.get("/llms.txt", response_class=Response)
     def llms_txt() -> Response:
         return Response(content=LLMS, media_type="text/plain; charset=utf-8")
+
+    @app.get("/og.png", response_class=Response)
+    def og_image() -> Response:
+        path = Path(__file__).with_name("static") / "og.png"
+        return Response(content=path.read_bytes(), media_type="image/png",
+                        headers={"cache-control": "public, max-age=86400"})
 
     @app.get("/favicon.svg", response_class=Response)
     def favicon() -> Response:

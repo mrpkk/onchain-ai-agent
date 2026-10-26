@@ -37,6 +37,10 @@ def shell(title: str, body: str, *, description: str = "", path: str = "/",
         f'<meta name="twitter:card" content="summary_large_image">'
         f'<meta name="twitter:title" content="{title}">'
         f'<meta name="twitter:description" content="{desc}">'
+        '<meta property="og:image" content="https://karta.rta.lat/og.png">'
+        '<meta property="og:image:width" content="1200">'
+        '<meta property="og:image:height" content="630">'
+        '<meta name="twitter:image" content="https://karta.rta.lat/og.png">'
     )
     ld = (
         '{"@context":"https://schema.org","@type":"SoftwareApplication",'
