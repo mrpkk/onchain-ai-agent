@@ -153,7 +153,8 @@ mainnet-исполнение выключено (STOP-гейт G2).
 mcp.directory и PulseMCP — это бесплатный вход, а не продажа.
 **Сделано 26.10 (лицензия):** **8 писем второй волны** — Privy, Alchemy, Dynamic, Magic, Gnosis/Safe,
 WalletConnect, Web3Auth, Ledger. Все с префиксом `KARTA:`, все в журнале `OUTREACH-LEDGER.csv`.
-Итого по KARTA: **17 доставленных** (5 дизайн-партнёры + 12 лицензия), **2 bounce** (Smithery,
+Четвёртая волна 26.10: Moralis, Transak, Ramp, Particle, MetaMask, Chainstack (все домены проверены
+по MX перед отправкой). Итого по KARTA: **23 доставленных** (5 дизайн-партнёры + 12 лицензия), **2 bounce** (Smithery,
 Alchemy `hello@` — 550), 1 автоответ (Ledger), 1 форма в ожидании. **Ответов от людей: 0.**
 Проверка почты 26.10: bounce-ы читаю через IMAP, а не жду уведомлений; Alchemy публикует только
 форму для sales — адрес берём оттуда, а не из GitHub-организации. Третья волна: Composio, E2B, Infura, QuickNode, MoonPay, Ambire.
