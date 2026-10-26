@@ -155,6 +155,11 @@ EIP-681 `payment_uri`, адрес Base-USDC, срок 72 ч. Токен и ад�
 **Сделано 26.10 (страницы):** `/attacks` и `/pilot` — публичные страницы под те же тексты,
 что в документах; в `llms.txt` и `sitemap.xml`.
 
+**Сделано 26.10 (awesome-mcp-servers):** форк создан, строка о KARTA закоммичена в
+`mrpkk/awesome-mcp-servers` (коммит `6c830d8a`, раздел Security, рядом с attest). **PR не открыт:**
+GitHub-токены в `~/.env` не имеют права на pull request в чужой репозиторий (403). Ссылка на
+создание PR подготовлена с заголовком и телом: `/tmp/opencode/pr-url.txt`. Нужен один клик владельца.
+
 **Сделано 26.10 (каталоги):** KARTA подан в **mcp.directory** через форму (headless-браузер, без окон
 на экране владельца) — ответ сайта: «Server Submitted! review within 24 hours». Поля: repo, имя
 `@mrpkk/karta`, описание 71 символ, email. Ранее был только официальный реестр MCP.
