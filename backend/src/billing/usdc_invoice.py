@@ -22,8 +22,10 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 USDC_DECIMALS = 6
-DEFAULT_DB = Path(os.getenv("KARTA_INVOICES_DB",
-                            str(Path.home() / ".local/share/karta/invoices.db")))
+def default_db() -> Path:
+    """Путь читается на каждом вызове: тесты подменяют KARTA_INVOICES_DB после импорта."""
+    return Path(os.getenv("KARTA_INVOICES_DB",
+                          str(Path.home() / ".local/share/karta/invoices.db")))
 ADDRESS_ENVS = ("KARTA_USDC_ADDRESS", "WALLET_BINANCE_USDC_BASE")
 BASE_RPC = os.getenv("KARTA_BASE_RPC", "https://base-rpc.publicnode.com")
 #: Native USDC на Base (6 знаков). Контракт публичный, не секрет.
@@ -41,8 +43,9 @@ def recipient() -> str:
 
 
 def _db() -> sqlite3.Connection:
-    DEFAULT_DB.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DEFAULT_DB, timeout=10)
+    path = default_db()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(path, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute(
         """

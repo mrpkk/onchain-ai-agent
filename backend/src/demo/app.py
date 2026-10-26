@@ -28,10 +28,15 @@ from ..billing import usdc_invoice
 from ..security.envelope import Envelope, SpendRequest, evaluate
 
 PREFIX = os.getenv("KARTA_PREFIX", "").rstrip("/")
-EVENTS = Path(os.getenv("KARTA_DEMO_EVENTS",
-                        str(Path.home() / ".local/share/karta-demo/events.jsonl")))
-PILOTS = Path(os.getenv("KARTA_PILOTS",
-                        str(Path.home() / ".local/share/karta-demo/pilot-requests.jsonl")))
+def events_path() -> Path:
+    """Путь к журналу событий читается на каждом вызове: тесты подменяют его после импорта."""
+    return Path(os.getenv("KARTA_DEMO_EVENTS",
+                          str(Path.home() / ".local/share/karta-demo/events.jsonl")))
+def pilots_path() -> Path:
+    return Path(os.getenv("KARTA_PILOTS",
+                          str(Path.home() / ".local/share/karta-demo/pilot-requests.jsonl")))
+
+
 NOW = datetime.now(timezone.utc)
 
 # Сценарии — из реальных случаев (SPEC v4 §2.2), не выдуманные.
@@ -85,18 +90,20 @@ SCENARIOS: dict[str, dict] = {
 
 
 def _record(payload: dict) -> None:
-    EVENTS.parent.mkdir(parents=True, exist_ok=True)
-    with EVENTS.open("a", encoding="utf-8") as fh:
+    path = events_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
 def _totals() -> dict:
-    if not EVENTS.exists():
+    path = events_path()
+    if not path.exists():
         return {"checks": 0, "by_verdict": {}, "by_ref": {}}
     by_verdict: dict[str, int] = {}
     by_ref: dict[str, int] = {}
     checks = 0
-    for line in EVENTS.read_text(encoding="utf-8").splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         try:
             e = json.loads(line)
         except ValueError:
@@ -146,8 +153,8 @@ async def pilot_request(request: Request) -> JSONResponse:
         "ref": request.query_params.get("ref", "direct")[:40],
         "ip_hash": hashlib.sha256(ip.encode()).hexdigest()[:16],
     }
-    PILOTS.parent.mkdir(parents=True, exist_ok=True)
-    with PILOTS.open("a", encoding="utf-8") as fh:
+    pilots_path().parent.mkdir(parents=True, exist_ok=True)
+    with pilots_path().open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(record, ensure_ascii=False) + "\n")
     _record({"ts": record["ts"], "scenario": "pilot_request", "verdict": "LEAD",
              "rule": "S7", "ref": record["ref"], "evidence": record["id"]})
@@ -350,7 +357,8 @@ def enterprise_page() -> str:
 @router.get("/api/v1/evidence")
 def evidence_bundle() -> JSONResponse:
     """Signed, offline-verifiable bundle of demo events (S3)."""
-    records = evidence.load_jsonl(EVENTS) if EVENTS.exists() else []
+    path = events_path()
+    records = evidence.load_jsonl(path) if path.exists() else []
     bundle = evidence.build_bundle(
         records,
         source="karta-demo",
@@ -662,6 +670,53 @@ def create_app(prefix: str = PREFIX) -> FastAPI:
                    methods=["POST", "GET", "DELETE", "OPTIONS"])
         )
         app.mount("/mcp", spend_mcp_dispatcher)
+
+    LLMS = """# KARTA — spend control for AI agents
+
+KARTA gives an agent one signed envelope per task: budget, allowed payees, no subscriptions,
+expiry. The decision is made outside the model, so a prompt-injected agent cannot sign around it.
+Every allowed spend returns an Ed25519 receipt that verifies offline.
+
+## Endpoints (base https://karta.rta.lat)
+- POST /api/v1/envelopes           {"budget_total":"2.50","per_call_max":"0.05","calls_max":2000,"allowlist":["api.example.com"],"ttl_hours":2}
+- POST /api/v1/envelopes/{id}/spend {"amount":"0.05","payee":"api.example.com"}
+- GET  /api/v1/envelopes/{id}      state: spent, remaining, calls_used
+- POST /api/v1/envelopes/{id}/kill {"reason":"runaway loop"}
+- GET  /api/v1/evidence/{id}       evidence bundle, offline-verifiable
+- GET  /api/v1/evidence            event bundle with hash chain
+- POST /api/v1/kill                {"active":true|false} operator stop for all verdicts
+- POST /mcp                        MCP streamable HTTP (tools: check_spend, open_envelope)
+
+## Rules (deterministic, rule ids are stable)
+E01 envelope_expired · E02 subscription_not_permitted · E03 payee_not_allowed ·
+E04 per_call_exceeded · E05 calls_exhausted · E06 budget_exceeded ·
+E07 above_approval_threshold · E08 envelope_killed (reserved)
+
+## Honest state
+Pre-revenue. No paying customers. The invariant is proven by tests: 100 parallel spend requests
+against a 50 x $0.05 budget produce exactly 50 approvals. Mainnet payment execution is disabled.
+
+Source: https://github.com/mrpkk/onchain-ai-agent (branch feature/v2-modernization)
+Contact: hello@rta.lat
+"""
+
+    @app.get("/llms.txt", response_class=Response)
+    def llms_txt() -> Response:
+        return Response(content=LLMS, media_type="text/plain; charset=utf-8")
+
+    @app.get("/sitemap.xml", response_class=Response)
+    def sitemap() -> Response:
+        body = ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">"
+                "<url><loc>https://karta.rta.lat/</loc></url>"
+                "<url><loc>https://karta.rta.lat/llms.txt</loc></url>"
+                "</urlset>")
+        return Response(content=body, media_type="application/xml")
+
+    @app.get("/robots.txt", response_class=Response)
+    def robots_txt() -> Response:
+        return Response(content="User-agent: *\nAllow: /\nSitemap: https://karta.rta.lat/sitemap.xml\n",
+                        media_type="text/plain")
 
     @app.get("/.well-known/mcp-registry-auth", response_class=Response)
     def registry_auth() -> Response:
