@@ -160,6 +160,11 @@ EIP-681 `payment_uri`, адрес Base-USDC, срок 72 ч. Токен и ад�
 GitHub-токены в `~/.env` не имеют права на pull request в чужой репозиторий (403). Ссылка на
 создание PR подготовлена с заголовком и телом: `/tmp/opencode/pr-url.txt`. Нужен один клик владельца.
 
+**Найдено 27.10 (Glama):** серверной страницы нет, но **коннектор оценён: `lat.rta.karta/guard` — рейтинг B**
+(`glama.ai/mcp/connectors/lat.rta.karta/guard/badges/score.svg` → 200). Поэтому:
+- в PR #17697 бейдж заменён на рабочий коннекторный (коммит форка `abd458ae`);
+- добавлена строка KARTA в **awesome-remote-mcp-servers** и открыт **PR #1707** (таблица: Security, Open, Maintainer KARTA).
+
 **Сделано 27.10 (прорыв по доступам):** классический токен `GITHUB_TOKEN_PACKAGES` (scope `repo`)
 умеет то, чего не умел fine-grained: **создавать PR и комментировать в чужих репозиториях**.
 - **Docker MCP Registry PR #6139** открыт: `servers/karta/{server.yaml,readme.md,tools.json}`, валидатор пройден.
