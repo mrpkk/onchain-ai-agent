@@ -31,7 +31,7 @@ AP2 → FIDO Alliance, UCP, ACP, EMVCo draft, AWS AgentCore Payments GA), а с�
 | S5 | Квитанция Ed25519 + `/verify` | 5–7.11 | проверка при выключенном сервере | `[x]` `31c2d1c` |
 | S6 | Три воспроизводимые атаки | 8–10.11 | посторонний проходит README за 10 мин | `[x]` `baa3a6a` |
 | S7 | 5 design partners | 11–14.11 | 5 писем о пилоте, ≥3 установки | `[~]` 2/5 отправлено: Smithery, Glama (`outreach/DESIGN-PARTNERS.md`) |
-| S8 | Enterprise-пакет (12 вопросов безопасности) | 15–18.11 | ≥1 ответ платформы | `[~]` `8dddb69` (пакет; ответа пока нет) |
+| S8 | Enterprise-пакет (12 вопросов безопасности) | 15–18.11 | ≥1 ответ платформы | `[~]` `8dddb69` + `638a94e` (публичные pricing/enterprise; ответа пока нет) |
 | S9 | Деньги и честный итог | 19–22.11 | ≥1 счёт, ≥1 LOI или 3 счёта | `[ ]` |
 
 **Правило:** следующий слайс — после измеренного результата предыдущего (≥48 ч), кроме S1→S2.
@@ -373,6 +373,12 @@ F1 Gasless ERC-4337 · F2 Digital twin · F3 Copilot · F4 Intent-engine · F5 �
 remaining `0.00`; неизвестный получатель → `E03` без списания; kill-switch → 503.
 **DoD:** 4 HTTP-теста + engine-тесты; полный backend **376 passed**.
 **Деньги:** 0 → 0 (guard, не платёж). **Метрика:** доля остановленных вызовов и сэкономленная сумма в демо.
+
+#### S8b — публичные pricing/enterprise страницы (26.10, `638a94e`)
+
+`https://rta.lat/karta/pricing` — 5 тарифов, USDC-инвойс, честно «no card checkout is claimed»;
+`https://rta.lat/karta/enterprise` — 12 вопросов, deployment, SLA/DPA drafts `LEGAL REVIEW REQUIRED`.
+Нет «100% safe», нет сертификаций, нет выдуманных клиентов. Проверено: 200, 2 теста.
 
 #### S8a — enterprise-пакет (26.10, `8dddb69`)
 
