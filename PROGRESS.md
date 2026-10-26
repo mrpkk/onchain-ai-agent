@@ -151,9 +151,15 @@ mainnet-исполнение выключено (STOP-гейт G2).
 Владение доменом подтверждено ed25519-ключом через `/.well-known/mcp-registry-auth`
 (приватный ключ вне git: `~/.local/share/mcp-registry/karta-key.pem`). Реестр кормит Glama,
 mcp.directory и PulseMCP — это бесплатный вход, а не продажа.
-**Сделано 26.10 (лицензия):** 5 писем — Privy, Alchemy, Dynamic, Magic, Gnosis/Safe. Все с префиксом
-`KARTA:`, все в общем журнале `OUTREACH-LEDGER.csv`. Итого исходящих по KARTA: **10** (5 дизайн-партнёры
-+ 5 лицензия), ответов 0.
+**Сделано 26.10 (лицензия):** **8 писем второй волны** — Privy, Alchemy, Dynamic, Magic, Gnosis/Safe,
+WalletConnect, Web3Auth, Ledger. Все с префиксом `KARTA:`, все в журнале `OUTREACH-LEDGER.csv`.
+Итого исходящих по KARTA: **13** (5 дизайн-партнёры + 8 лицензия), ответов 0. Дневной лимит 15 —
+дальше только follow-up через 48 ч, иначе ящик начинает выглядеть рассылкой.
+
+**Хакатоны 26.10:** страница lablab не содержит «Agent Rush» (ссылка была из поиска, не с сайта).
+В живом списке есть `alpaca-ai-trading-agents-hackathon` и `vultr-hackathon` — торговые агенты
+прямо наш домен. Регистрация требует аккаунт lablab: без него подача невозможна, это ограничение
+владельца, а не текста.
 
 **Проверено 26.10 (гранты — плохая новость):** AI Grant — «Applications for Batch 4 are closed»;
 `deepfunding.ai` не отвечает; `base.org/grants` отдаёт ошибку. Вывод: список «10 грантов» упирается
