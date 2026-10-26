@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "backend"))
 
+from src.demo import app as demo  # noqa: E402
 from src.demo.app import create_app  # noqa: E402
 from src.security import killswitch  # noqa: E402
 
@@ -30,6 +31,7 @@ from src.security import killswitch  # noqa: E402
 @pytest.fixture()
 def client():
     killswitch.reset()
+    demo._CREATES.clear()
     with TestClient(create_app()) as c:
         yield c
     killswitch.reset()

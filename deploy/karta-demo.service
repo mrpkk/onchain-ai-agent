@@ -1,18 +1,19 @@
+# Демо KARTA живёт как ПОЛЬЗОВАТЕЛЬСКИЙ юнит (systemctl --user), не системный:
+# файл установлен в ~/.config/systemd/user/karta-demo.service и already enabled.
+# Системный дубль удалён 26.10.2026 — два юнита дрались за порт 8295.
 [Unit]
-Description=KARTA public demo — spend-control verdicts (rta.lat/karta)
-Documentation=https://karta.rta.lat
+Description=KARTA demo — the policy decides (S1)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=iamthat
 WorkingDirectory=/media/Sruti/iamthat/work/onchain-ai-agent/backend
-Environment=KARTA_DEMO_EVENTS=/media/Sruti/iamthat/.local/share/karta-demo/events.jsonl
+Environment=KARTA_PREFIX=/karta
+Environment=KARTA_DEMO_EVENTS=/home/iamthat/.local/share/karta-demo/events.jsonl
 ExecStart=/media/Sruti/iamthat/work/onchain-ai-agent/backend/.venv/bin/python -m uvicorn src.demo.app:app --host 127.0.0.1 --port 8295
 Restart=always
-RestartSec=2
-NoNewPrivileges=true
+RestartSec=3
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
