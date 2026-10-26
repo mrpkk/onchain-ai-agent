@@ -19,6 +19,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from .envelope import Envelope, SpendRequest, Verdict, evaluate
+from .evidence import sign_payload
 
 
 def db_path() -> Path:
@@ -171,7 +172,8 @@ def reserve(envelope_id: str, *, amount: Decimal, payee: str,
         )
         conn.execute("COMMIT")
         payload["payload_sha256"] = digest
-        payload["signed"] = False  # Ed25519 — слайс S5, сейчас только хэш (не выдаём за подпись)
+        payload["signed"] = True
+        payload.update(sign_payload(payload))
         return verdict, payload
     except Exception:
         conn.execute("ROLLBACK")

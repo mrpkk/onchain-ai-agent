@@ -140,6 +140,59 @@ def metrics() -> dict:
     return _totals()
 
 
+@router.get("/api/v1/receipt/sample")
+def sample_receipt() -> JSONResponse:
+    """A real signed receipt for the /verify demo. Small budget, no money moves."""
+    envelope = ledger.create(budget_total=Decimal("0.02"), per_call_max=Decimal("0.02"),
+                             calls_max=1, allowlist=("api.example.com",), ttl_hours=1)
+    _, receipt = ledger.reserve(envelope["envelope_id"], amount=Decimal("0.02"),
+                                payee="api.example.com")
+    return JSONResponse(receipt or {})
+
+
+VERIFY_PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KARTA — verify a receipt offline</title>
+<style>body{background:#0b0d10;color:#e8e6e3;font:16px/1.6 system-ui,sans-serif;max-width:900px;margin:0 auto;padding:32px 20px}
+textarea{width:100%;min-height:260px;background:#11151a;color:#e8e6e3;border:1px solid #22272e;border-radius:10px;padding:14px;font:13px/1.5 ui-monospace,monospace}
+button{background:#1c6b58;color:#eafff8;border:0;border-radius:8px;padding:12px 18px;font-weight:600;cursor:pointer}
+pre{background:#11151a;border:1px solid #22272e;border-radius:10px;padding:14px;overflow:auto}.ok{color:#3fb950}.bad{color:#f85149}.dim{color:#8b949e}</style>
+</head><body>
+<h1>Verify a KARTA receipt</h1>
+<p class="dim">Paste a receipt JSON. The Ed25519 signature is checked in this browser; the KARTA server is not called.</p>
+<textarea id="in" placeholder="Paste receipt JSON here"></textarea>
+<p><button id="go">Verify</button> <button id="sample" style="background:#30363d">Load signed sample</button></p>
+<pre id="out">No receipt yet.</pre>
+<script>
+function canonical(v){if(Array.isArray(v))return '['+v.map(canonical).join(',')+']';
+if(v&&typeof v==='object')return '{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+canonical(v[k])).join(',')+'}';
+return JSON.stringify(v);}
+function b64(s){const bin=atob(s);return Uint8Array.from(bin,c=>c.charCodeAt(0));}
+async function verify(){
+ const out=document.getElementById('out');
+ try{
+  const p=JSON.parse(document.getElementById('in').value);
+  if(p.signed!==true){out.innerHTML='<span class="bad">INVALID</span> — signed is not true';return;}
+  if(p.algorithm!=='Ed25519'){out.innerHTML='<span class="bad">INVALID</span> — algorithm is not Ed25519';return;}
+  const {signature,public_key,algorithm,...body}=p;
+  const key=await crypto.subtle.importKey('raw',b64(public_key),{name:'Ed25519'},false,['verify']);
+  const ok=await crypto.subtle.verify('Ed25519',key,b64(signature),new TextEncoder().encode(canonical(body)));
+  out.innerHTML=ok?'<span class="ok">VALID</span> — signature and payload match':'<span class="bad">INVALID</span> — signature does not match';
+ }catch(e){out.innerHTML='<span class="bad">INVALID</span> — '+String(e).replace(/[<>&]/g,'');}
+}
+document.getElementById('go').onclick=verify;
+document.getElementById('sample').onclick=async()=>{
+ const r=await fetch('api/v1/receipt/sample');document.getElementById('in').value=JSON.stringify(await r.json(),null,2);verify();
+};
+</script>
+</body></html>"""
+
+
+@router.get("/verify", response_class=HTMLResponse)
+def verify_page() -> str:
+    return VERIFY_PAGE
+
+
 @router.get("/api/v1/evidence")
 def evidence_bundle() -> JSONResponse:
     """Signed, offline-verifiable bundle of demo events (S3)."""

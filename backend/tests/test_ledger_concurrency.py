@@ -22,6 +22,7 @@ os.environ["KARTA_DEMO_EVENTS"] = str(Path(tempfile.mkdtemp(prefix="karta-events
 from fastapi.testclient import TestClient  # noqa: E402
 
 from src.demo.app import create_app  # noqa: E402
+from src.security.evidence import verify_payload  # noqa: E402
 
 P = "/karta"
 client = TestClient(create_app(P))
@@ -61,7 +62,11 @@ def test_receipt_is_issued_only_for_allowed_spends():
     eid = _open(budget_total="1", per_call_max="0.10")["envelope_id"]
     first = _spend(eid, "0.10")
     assert first["receipt"]["payload_sha256"]
-    assert first["receipt"]["signed"] is False  # честно: подпись появится в S5
+    assert first["receipt"]["signed"] is True
+    assert first["receipt"]["signature"] and first["receipt"]["public_key"]
+    assert verify_payload(first["receipt"]) is True
+    tampered = dict(first["receipt"]); tampered["amount"] = "999"
+    assert verify_payload(tampered) is False
     blocked = _spend(eid, "5")
     assert blocked["verdict"]["verdict"] == "BLOCK"
     assert blocked["receipt"] is None

@@ -141,6 +141,33 @@ def build_evidence(
     return package
 
 
+_SIGNATURE_FIELDS = {"signature", "public_key", "algorithm"}
+
+
+def sign_payload(payload: dict[str, Any]) -> dict[str, str]:
+    """Sign any canonical payload with the shared Ed25519 key. No secrets returned."""
+    signature = _load_private_key().sign(canonical(payload))
+    return {
+        "signature": base64.b64encode(signature).decode(),
+        "public_key": public_key_b64(),
+        "algorithm": "Ed25519",
+    }
+
+
+def verify_payload(payload: dict[str, Any]) -> bool:
+    """Verify a signed payload offline; signature fields are not part of the message."""
+    try:
+        public = Ed25519PublicKey.from_public_bytes(
+            base64.b64decode(payload["public_key"])
+        )
+        signature = base64.b64decode(payload["signature"])
+        body = {k: v for k, v in payload.items() if k not in _SIGNATURE_FIELDS}
+        public.verify(signature, canonical(body))
+        return True
+    except (KeyError, ValueError, TypeError, InvalidSignature):
+        return False
+
+
 def verify_evidence(package: dict[str, Any]) -> bool:
     """True only if the signature and canonical package are unchanged."""
     try:
