@@ -787,6 +787,14 @@ Contact: hello@rta.lat
     def llms_txt() -> Response:
         return Response(content=LLMS, media_type="text/plain; charset=utf-8")
 
+    @app.get("/favicon.svg", response_class=Response)
+    def favicon() -> Response:
+        svg = ("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\">"
+               "<rect width=\"64\" height=\"64\" rx=\"14\" fill=\"#0b0d10\"/>"
+               "<path d=\"M18 14v36M18 32l22-18M18 32l24 18\" stroke=\"#e8e6e3\" "
+               "stroke-width=\"6\" stroke-linecap=\"round\" fill=\"none\"/></svg>")
+        return Response(content=svg, media_type="image/svg+xml")
+
     @app.get("/sitemap.xml", response_class=Response)
     def sitemap() -> Response:
         body = ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"

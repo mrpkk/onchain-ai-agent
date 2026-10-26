@@ -160,6 +160,13 @@ EIP-681 `payment_uri`, адрес Base-USDC, срок 72 ч. Токен и ад�
 GitHub-токены в `~/.env` не имеют права на pull request в чужой репозиторий (403). Ссылка на
 создание PR подготовлена с заголовком и телом: `/tmp/opencode/pr-url.txt`. Нужен один клик владельца.
 
+**Сделано 27.10 (Docker MCP Catalog):** образ `ghcr.io/mrpkk/karta-demo:0.1.0` опубликован
+(токен `GITHUB_TOKEN_PACKAGES`, второй пуш прошёл). Запись `servers/karta` создана в форке
+`mrpkk/mcp-registry` (коммит `9ac20ad`): `server.yaml` (type: remote, streamable-http),
+`readme.md`, `tools.json`. Валидатор репозитория — **все пункты ✅**, включая иконку
+(`https://karta.rta.lat/favicon.svg`, добавлен маршрут). **PR не открыт**: у токенов нет права на PR
+в чужой репозиторий — нужен один клик владельца, ссылка в `/tmp/opencode/pr-mcpregistry.txt`.
+
 **Сделано 26.10 (каталоги, продолжение):** KARTA подан в **mcpservers.org** через форму (headless):
 ответ сайта — «Your MCP server "KARTA" has been submitted successfully. Review within 2 weeks».
 Поля: категория Finance, repo/сайт, registry name `lat.rta.karta/guard`, remote URL `https://karta.rta.lat/mcp`.
