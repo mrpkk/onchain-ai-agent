@@ -129,6 +129,22 @@ def _killed() -> JSONResponse | None:
 _EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s]{2,24}$")
 
 
+
+
+def admin_token() -> str:
+    """Токен владельца читается на каждом вызове: тесты и деплой задают его отдельно."""
+    return os.getenv("KARTA_ADMIN_TOKEN", "").strip()
+
+
+def _admin(request: Request) -> JSONResponse | None:
+    expected = admin_token()
+    if not expected:
+        return _error("admin_disabled", "KARTA_ADMIN_TOKEN is not configured", 403,
+                      "set KARTA_ADMIN_TOKEN in the service environment")
+    if request.headers.get("x-admin-token", "") != expected:
+        return _error("forbidden", "admin token required", 403, "send X-Admin-Token header")
+    return None
+
 @router.post("/api/v1/pilot-requests")
 async def pilot_request(request: Request) -> JSONResponse:
     """Заявка на бесплатный пилот. Храним только то, что человек сам прислал."""
@@ -353,6 +369,42 @@ async def invoice_check(invoice_id: str, request: Request) -> JSONResponse:
 def enterprise_page() -> str:
     return ENTERPRISE_PAGE
 
+
+
+
+@router.post("/api/v1/invoice")
+async def create_invoice(request: Request) -> JSONResponse:
+    """Выставить счёт (только владелец): без этого «первые деньги» не начать."""
+    denied = _admin(request)
+    if denied is not None:
+        return denied
+    body = await request.json()
+    try:
+        from ..billing import usdc_invoice as inv
+
+        item = inv.create(body.get("amount"), memo=str(body.get("memo", ""))[:200],
+                          ttl_hours=int(body.get("ttl_hours", 72)))
+    except Exception as exc:  # noqa: BLE001 - контракт ошибки важнее типа
+        return _error("invalid_invoice", str(exc)[:200], 400, "amount as string, e.g. \"2500\"")
+    return JSONResponse(item, status_code=201)
+
+
+@router.get("/api/v1/pilot-requests")
+def pilot_requests(request: Request) -> JSONResponse:
+    """Заявки на пилот (только владелец)."""
+    denied = _admin(request)
+    if denied is not None:
+        return denied
+    path = Path(os.getenv("KARTA_PILOTS",
+                          str(Path.home() / ".local/share/karta-demo/pilot-requests.jsonl")))
+    items = []
+    if path.exists():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            try:
+                items.append(json.loads(line))
+            except ValueError:
+                continue
+    return JSONResponse({"count": len(items), "items": items[-100:]})
 
 @router.get("/api/v1/evidence")
 def evidence_bundle() -> JSONResponse:
