@@ -46,3 +46,4 @@ First call is 20 minutes and needs one person who can describe a real paid workf
 - Live demo, no signup: <https://karta.rta.lat>
 - Attacks you can run yourself: <https://github.com/mrpkk/onchain-ai-agent/tree/feature/v2-modernization/attacks>
 - Install: [`INSTALL.md`](INSTALL.md)
+- How the invoice works (USDC on Base, refund rule): [`INVOICE-USDC.md`](INVOICE-USDC.md)
