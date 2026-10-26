@@ -1,0 +1,17 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "lat.rta.karta/guard",
+  "title": "KARTA — spend control for AI agents",
+  "description": "Task envelope, budget ledger, kill switch and signed receipts for agents that pay.",
+  "version": "0.1.0",
+  "repository": {
+    "url": "https://github.com/mrpkk/onchain-ai-agent",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://karta.rta.lat/mcp"
+    }
+  ]
+}

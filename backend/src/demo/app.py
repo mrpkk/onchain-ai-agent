@@ -657,6 +657,17 @@ def create_app(prefix: str = PREFIX) -> FastAPI:
     app.mount(mount_path, spend_mcp_dispatcher)
     if prefix:  # поддомен обслуживает те же маршруты с корня
         app.include_router(router)
+        app.router.routes.append(
+            _Route("/mcp", endpoint=_mcp_forward,
+                   methods=["POST", "GET", "DELETE", "OPTIONS"])
+        )
+        app.mount("/mcp", spend_mcp_dispatcher)
+
+    @app.get("/.well-known/mcp-registry-auth", response_class=Response)
+    def registry_auth() -> Response:
+        # подтверждение владения доменом для официального реестра MCP
+        return Response(content=os.getenv("MCP_REGISTRY_AUTH", ""),
+                        media_type="text/plain")
 
     @app.get(prefix or "/", response_class=HTMLResponse)
     def page() -> str:  # noqa: D401
