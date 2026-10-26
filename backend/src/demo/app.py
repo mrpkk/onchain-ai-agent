@@ -696,9 +696,26 @@ E07 above_approval_threshold · E08 envelope_killed (reserved)
 Pre-revenue. No paying customers. The invariant is proven by tests: 100 parallel spend requests
 against a 50 x $0.05 budget produce exactly 50 approvals. Mainnet payment execution is disabled.
 
+Pages: https://karta.rta.lat/attacks (three reproducible attacks), https://karta.rta.lat/pilot (30 days free)
 Source: https://github.com/mrpkk/onchain-ai-agent (branch feature/v2-modernization)
 Contact: hello@rta.lat
 """
+
+    @app.get(f"{prefix}/attacks", response_class=HTMLResponse)
+    def attacks_page() -> str:  # noqa: D401
+        from .pages import ATTACKS_BODY, shell
+
+        return shell("KARTA — three attacks, refused", ATTACKS_BODY)
+
+    @app.get(f"{prefix}/pilot", response_class=HTMLResponse)
+    def pilot_page() -> str:  # noqa: D401
+        from .pages import PILOT_BODY, shell
+
+        return shell("KARTA pilot — 30 days, free", PILOT_BODY)
+
+    if prefix:  # поддомен обслуживает те же страницы с корня
+        app.add_api_route("/attacks", attacks_page, response_class=HTMLResponse)
+        app.add_api_route("/pilot", pilot_page, response_class=HTMLResponse)
 
     @app.get("/llms.txt", response_class=Response)
     def llms_txt() -> Response:
@@ -710,6 +727,8 @@ Contact: hello@rta.lat
                 "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">"
                 "<url><loc>https://karta.rta.lat/</loc></url>"
                 "<url><loc>https://karta.rta.lat/llms.txt</loc></url>"
+                "<url><loc>https://karta.rta.lat/attacks</loc></url>"
+                "<url><loc>https://karta.rta.lat/pilot</loc></url>"
                 "</urlset>")
         return Response(content=body, media_type="application/xml")
 
