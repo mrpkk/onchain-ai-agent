@@ -817,6 +817,13 @@ Contact: hello@rta.lat
     def llms_txt() -> Response:
         return Response(content=LLMS, media_type="text/plain; charset=utf-8")
 
+    @app.get("/deck.pdf", response_class=Response)
+    def deck_pdf() -> Response:
+        # shortcut: PDF собирается вручную из /deck (headless print); пересобирать после правок дека
+        path = Path(__file__).with_name("static") / "karta-deck.pdf"
+        return Response(content=path.read_bytes(), media_type="application/pdf",
+                        headers={"cache-control": "public, max-age=3600"})
+
     @app.get("/og.png", response_class=Response)
     def og_image() -> Response:
         path = Path(__file__).with_name("static") / "og.png"

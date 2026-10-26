@@ -15,7 +15,12 @@ table{width:100%;border-collapse:collapse;margin:14px 0}
 th,td{text-align:left;padding:8px 10px;border-bottom:1px solid #22272e;font-size:14.5px}
 th{color:#8b949e;font-weight:500}a{color:#79c0ff}
 .cta{display:inline-block;margin:24px 8px 0 0;border:1px solid #3d444d;border-radius:10px;padding:10px 16px;text-decoration:none;color:#e8e6e3}
-.cta:hover{border-color:#79c0ff}"""
+.cta:hover{border-color:#79c0ff}
+@media print{body{background:#fff;color:#111}main{max-width:none;padding:0}
+h1{font-size:24px}h2{font-size:15px;margin:18px 0 6px;break-after:avoid}
+p,td,th{font-size:11.5px;color:#111}table{break-inside:avoid}
+pre{background:#f5f5f5;border-color:#ddd;color:#111}
+a{color:#111;text-decoration:none}.cta,.dim{display:none}}"""
 
 
 def shell(title: str, body: str, *, description: str = "", path: str = "/",
@@ -325,6 +330,7 @@ today needs three to six months to reach parity.</p>
 <p>One of three: a 30-day pilot for one team ($0), a licence conversation with whoever owns agent
 payments at your company, or one introduction to a team whose agents already pay.</p>
 
+<a class="cta" href="/deck.pdf">Download as PDF</a>
 <a class="cta" href="mailto:hello@rta.lat?subject=KARTA%20deck">Write to us</a>
 <a class="cta" href="/report">See the survey</a>
 <a class="cta" href="/attacks">Run the attacks</a>
