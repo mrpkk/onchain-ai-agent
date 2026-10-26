@@ -38,6 +38,9 @@ AP2 → FIDO Alliance, UCP, ACP, EMVCo draft, AWS AgentCore Payments GA), а с�
 **Стоп-гейты:** G1 домен · G2 mainnet-платежи · G3 письма · G4 цена · G5 публикация evidence ·
 G6 юрлицо · G7 имя (полный список — SPEC v4 §14).
 **Запрет:** новые продукты, токен, кастоди, платный трафик — до первого платежа.
+**Границы (26.10.2026):** KARTA — наш продукт и наш код. attest / drift / nidhipati / soma /
+skilllint / mitracore — только вызов по HTTP/MCP, код не меняем. Карта:
+`/media/Sruti/iamthat/work/sales/PROGRESS/OWNERSHIP-2026-10-26.md`.
 **Итог 27 дней (TARGET, не обещание):** продукт с публичным демо + 5 партнёров + 1 LOI;
 деньги первого порядка — пилоты $2 500 и аудиты $1 250–2 500. $1M — только сделка/лицензия (2–5 %).
 
