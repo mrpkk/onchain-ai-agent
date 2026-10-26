@@ -24,6 +24,7 @@ from fastapi import APIRouter, FastAPI, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from ..security import evidence, killswitch, ledger, x402
+from ..billing import usdc_invoice
 from ..security.envelope import Envelope, SpendRequest, evaluate
 
 PREFIX = os.getenv("KARTA_PREFIX", "").rstrip("/")
@@ -283,6 +284,62 @@ def verify_page() -> str:
 @router.get("/pricing", response_class=HTMLResponse)
 def pricing_page() -> str:
     return PRICING_PAGE
+
+
+@router.get("/invoice/{invoice_id}", response_class=HTMLResponse)
+def invoice_page(invoice_id: str):
+    """Public invoice page: amount, address, memo, status. No custody."""
+    item = usdc_invoice.get(invoice_id)
+    if item is None:
+        return HTMLResponse("<h1>Invoice not found</h1>", status_code=404)
+    status = item.get("status", "pending")
+    color = "#3fb950" if status == "paid" else "#d29922"
+    rows = "".join(
+        f"<tr><td>{html.escape(str(k))}</td><td>{html.escape(str(v))}</td></tr>"
+        for k, v in item.items()
+        if k not in {"payment_uri"}
+    )
+    pay = html.escape(item.get("payment_uri", ""))
+    return HTMLResponse(f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>KARTA invoice</title>
+<style>body{{background:#0b0d10;color:#e8e6e3;font:16px/1.6 system-ui,sans-serif;max-width:820px;margin:0 auto;padding:32px 20px}}
+table{{border-collapse:collapse;width:100%}}td{{border-bottom:1px solid #22272e;padding:8px;vertical-align:top}}
+td:first-child{{color:#8b949e;width:180px}}code{{background:#171b21;padding:2px 5px;border-radius:4px}}
+.status{{color:{color};font-weight:700}}input{{background:#11151a;color:#e8e6e3;border:1px solid #22272e;border-radius:8px;padding:10px;width:100%}}
+button{{background:#1c6b58;color:#eafff8;border:0;border-radius:8px;padding:10px 16px;font-weight:600;margin-top:8px}}
+pre{{background:#11151a;border:1px solid #22272e;border-radius:8px;padding:12px;overflow:auto}}</style>
+</head><body>
+<h1>KARTA invoice</h1>
+<p>Status: <span class="status">{html.escape(status)}</span></p>
+<table>{rows}</table>
+<p class="dim">Pay USDC on Base to the address above, exact amount. The recipient is the address in this invoice; never a chat address.</p>
+<p class="dim">Payment URI: <code>{pay}</code></p>
+<h2>Already paid?</h2>
+<p class="dim">Paste the Base transaction hash. The server reads the chain; if it cannot confirm, the invoice stays pending.</p>
+<input id="tx" placeholder="0x…">
+<button id="check">Check transaction</button>
+<pre id="out"></pre>
+<script>
+document.getElementById('check').onclick=async()=>{{
+ const tx=document.getElementById('tx').value.trim(); const out=document.getElementById('out');
+ if(!tx){{out.textContent='Paste a transaction hash.';return;}}
+ try{{
+  const r=await fetch('api/v1/invoice/{invoice_id}/check',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{tx_hash:tx}})}});
+  out.textContent=JSON.stringify(await r.json(),null,2);
+ }}catch(e){{out.textContent=String(e);}}
+}};
+</script>
+</body></html>""", status_code=200)
+
+
+@router.post("/api/v1/invoice/{invoice_id}/check")
+async def invoice_check(invoice_id: str, request: Request) -> JSONResponse:
+    body = await request.json()
+    try:
+        item = usdc_invoice.verify(invoice_id, str(body.get("tx_hash", "")))
+    except KeyError:
+        return _error("not_found", "invoice not found", 404, "create an invoice first")
+    return JSONResponse(item)
 
 
 @router.get("/enterprise", response_class=HTMLResponse)
