@@ -160,6 +160,11 @@ EIP-681 `payment_uri`, адрес Base-USDC, срок 72 ч. Токен и ад�
 GitHub-токены в `~/.env` не имеют права на pull request в чужой репозиторий (403). Ссылка на
 создание PR подготовлена с заголовком и телом: `/tmp/opencode/pr-url.txt`. Нужен один клик владельца.
 
+**Публичный MCP вырос до 6 инструментов (27.10):** `check_spend`, `open_envelope`, `get_envelope`,
+`kill_envelope`, `envelope_evidence` (пакет с воспроизводимым sha256), `policy_rules`.
+Все с аннотациями. Это прямой ответ на разбор Glama (tool count 2/5, completeness 2/5).
+Ждём пересчёта оценки — бейдж пока показывает старый B (замер 26.10 05:40).
+
 **Грейд Glama объяснён и исправлен (27.10):** коннектор оценён **B**, и Glama показал разбор:
 Disambiguation 5/5, Naming 4/5, Conciseness 5/5, **Tool count 2/5** и **Completeness 2/5** — потому что
 публичный MCP отдавал **один** инструмент `check_spend`. Добавлены `open_envelope`, `get_envelope`,
