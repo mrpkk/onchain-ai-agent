@@ -164,6 +164,12 @@ GitHub-токены в `~/.env` не имеют права на pull request в 
 `{page, ref, agent}`; `/metrics` отдаёт `views.by_page`, `humans`, `crawlers`. Сторонних скриптов нет.
 Нужна, чтобы отличать «пришли люди» от «пришёл краулер» — иначе решения строятся на шуме.
 
+**Glama поднял до A (27.10, замер 07:20):** после расширения MCP до 5 инструментов
+Disambiguation **5/5**, Naming 4/5, **Tool Count 5/5**, **Completeness 4/5** (не хватает
+list_envelopes, изменения бюджета, запроса журнала). Бейдж: `rated A`. Это первая внешняя оценка
+продукта, которую можно показать покупателю. Дальше добавлен `envelope_evidence` (6-й инструмент)
+и HTTP-маршрут `/api/v1/envelopes/{id}/evidence` — паритет с MCP, 413 тестов.
+
 **Публичный MCP вырос до 6 инструментов (27.10):** `check_spend`, `open_envelope`, `get_envelope`,
 `kill_envelope`, `envelope_evidence` (пакет с воспроизводимым sha256), `policy_rules`.
 Все с аннотациями. Это прямой ответ на разбор Glama (tool count 2/5, completeness 2/5).
