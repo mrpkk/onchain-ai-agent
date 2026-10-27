@@ -160,6 +160,16 @@ EIP-681 `payment_uri`, адрес Base-USDC, срок 72 ч. Токен и ад�
 GitHub-токены в `~/.env` не имеют права на pull request в чужой репозиторий (403). Ссылка на
 создание PR подготовлена с заголовком и телом: `/tmp/opencode/pr-url.txt`. Нужен один клик владельца.
 
+**ПЕРВЫЙ ЖИВОЙ ЛИСТИНГ (27.10):** **mcpservers.org одобрил KARTA** — письмо от `contact@mcpservers.org`:
+«Your MCP Server has been approved and is now live», страница `https://mcpservers.org/servers/karta-rta-lat`.
+Проверить автоматически не смог: сайт за Cloudflare-челленджем (403 и для curl, и для headless);
+факт подтверждён письмом модерации, не моей догадкой.
+
+**Ответ на требование awesome-mcp-servers (27.10):** их бот требует Dockerfile **в Glama** и бейдж
+формата `glama.ai/mcp/servers/OWNER/REPO`. Dockerfile в корне репозитория теперь есть (собирается,
+healthcheck, `/mcp` внутри). Серверная страница Glama ещё 404, коннектор — B. Комментарий в PR #17697
+с объяснением и предложением снять бейдж, если ждать не хотят.
+
 **Сделано 27.10 (Cline Marketplace):** заявка **#3306** в `cline/mcp-marketplace` по их шаблону:
 repo URL, лого 400×400 (`https://karta.rta.lat/logo-400.png`, регенерировано из иконки),
 подтверждение установки по инструкции, честное «pre-revenue». Добавлены `llms-install.md`
