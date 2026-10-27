@@ -160,6 +160,15 @@ EIP-681 `payment_uri`, адрес Base-USDC, срок 72 ч. Токен и ад�
 GitHub-токены в `~/.env` не имеют права на pull request в чужой репозиторий (403). Ссылка на
 создание PR подготовлена с заголовком и телом: `/tmp/opencode/pr-url.txt`. Нужен один клик владельца.
 
+**Грейд Glama объяснён и исправлен (27.10):** коннектор оценён **B**, и Glama показал разбор:
+Disambiguation 5/5, Naming 4/5, Conciseness 5/5, **Tool count 2/5** и **Completeness 2/5** — потому что
+публичный MCP отдавал **один** инструмент `check_spend`. Добавлены `open_envelope`, `get_envelope`,
+`kill_envelope`, `policy_rules` + аннотации (`readOnlyHint`/`destructiveHint`) у всех пяти.
+**Найден и исправлен молчаливый баг:** `INSERT OR IGNORE` в таблицу `kills` глотал NOT NULL по старой
+колонке `actor` — kill «проходил», но не сохранялся, и списание после остановки проходило (`ALLOW`).
+Теперь `ON CONFLICT DO NOTHING` + миграция схемы; списание после kill даёт `BLOCK/E08`, квитанция не
+выдаётся. 4 регрессионных теста, прогон **411 passed**.
+
 **ПЕРВЫЙ ЖИВОЙ ЛИСТИНГ (27.10):** **mcpservers.org одобрил KARTA** — письмо от `contact@mcpservers.org`:
 «Your MCP Server has been approved and is now live», страница `https://mcpservers.org/servers/karta-rta-lat`.
 Проверить автоматически не смог: сайт за Cloudflare-челленджем (403 и для curl, и для headless);

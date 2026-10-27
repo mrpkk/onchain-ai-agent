@@ -63,8 +63,18 @@ def init() -> None:
                 payload_sha256 TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_res_envelope ON reservations(envelope_id);
+            CREATE TABLE IF NOT EXISTS kills (
+                envelope_id TEXT PRIMARY KEY,
+                reason TEXT NOT NULL,
+                actor TEXT NOT NULL DEFAULT 'owner',
+                killed_at TEXT NOT NULL
+            );
             """
         )
+        # миграция: старая таблица могла быть создана без actor (CREATE IF NOT EXISTS её не тронет)
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(kills)")}
+        if "actor" not in columns:
+            conn.execute("ALTER TABLE kills ADD COLUMN actor TEXT NOT NULL DEFAULT 'owner'")
 
 
 def _row_to_envelope(row: sqlite3.Row) -> Envelope:
@@ -145,6 +155,14 @@ def reserve(envelope_id: str, *, amount: Decimal, payee: str,
             conn.execute("COMMIT")
             return (Verdict("BLOCK", "E00", "envelope_not_found", "—", "open_envelope"), None)
 
+        killed = conn.execute("SELECT reason, killed_at FROM kills WHERE envelope_id=?",
+                              (envelope_id,)).fetchone()
+        if killed is not None:
+            conn.execute("COMMIT")
+            return (Verdict("BLOCK", "E08", "envelope_killed",
+                            f"stopped at {killed['killed_at']}: {killed['reason']}",
+                            "open_new_envelope"), None)
+
         env = _row_to_envelope(row)
         request = SpendRequest(amount=amount, payee=payee, is_subscription=is_subscription,
                                calls_so_far=row["calls_used"],
@@ -180,6 +198,34 @@ def reserve(envelope_id: str, *, amount: Decimal, payee: str,
         raise
     finally:
         conn.close()
+
+
+def kill(envelope_id: str, *, reason: str = "owner stop") -> dict | None:
+    """Остановить один конверт. Идемпотентно: первая причина остаётся."""
+    conn = _connect()
+    conn.row_factory = sqlite3.Row
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        if conn.execute("SELECT 1 FROM envelopes WHERE envelope_id=?",
+                        (envelope_id,)).fetchone() is None:
+            conn.execute("COMMIT")
+            return None
+        # ON CONFLICT, а не OR IGNORE: OR IGNORE молча глотает NOT NULL и убивает запись
+        conn.execute(
+            "INSERT INTO kills (envelope_id, reason, actor, killed_at) VALUES (?,?,?,?)"
+            " ON CONFLICT(envelope_id) DO NOTHING",
+            (envelope_id, reason[:300], "mcp",
+             datetime.now(timezone.utc).isoformat(timespec="seconds")))
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.close()
+    state = get(envelope_id)
+    if state is None:
+        return None
+    return {"envelope_id": envelope_id, "kill": {"reason": reason}, "totals": state}
 
 
 def parse_decimal(value: object, field: str) -> Decimal:
