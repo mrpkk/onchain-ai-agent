@@ -682,6 +682,8 @@ small{color:var(--dim)}a{color:#79c0ff}
 <p class="sub">KARTA — spend control for AI agents. One signed envelope per task, enforced
 outside the model. Every check below is deterministic: same input, same rule, same verdict.
 No wallet, no funds, no signup.</p>
+<p class="sub" style="margin-top:-18px"><small>Glama rated <b>A</b> · Healthy · six MCP tools · 413 tests ·
+<a href="/report">2 500 servers surveyed</a></small></p>
 <div class="grid" id="grid"></div>
 <div class="out" id="out"><small>Pick a scenario. The envelope and the request are shown; the verdict is produced by the same engine the API and MCP use.</small></div>
 <p style="margin-top:28px"><small>Free tier: 20 checks a day · <a href="https://rta.lat/nidhipati/">spend audit</a> · <a href="https://attest.rta.lat/">signed receipts</a> · <a href="mailto:hello@rta.lat?subject=KARTA%20pilot">run a 30-day pilot</a></small></p>
@@ -783,6 +785,7 @@ E07 above_approval_threshold · E08 envelope_killed (reserved)
 Pre-revenue. No paying customers. The invariant is proven by tests: 100 parallel spend requests
 against a 50 x $0.05 budget produce exactly 50 approvals. Mainnet payment execution is disabled.
 
+Evaluation: Glama rated A (connector lat.rta.karta/guard, 27.10.2026)
 Pages: https://karta.rta.lat/attacks (three reproducible attacks), https://karta.rta.lat/pilot (30 days free), https://karta.rta.lat/hi/pilot (Hindi), https://karta.rta.lat/deck (one-page deck)
 Source: https://github.com/mrpkk/onchain-ai-agent (branch feature/v2-modernization)
 Contact: hello@rta.lat

@@ -105,7 +105,7 @@ against a 50 x $0.05 budget produce exactly 50 approvals.</p>
 
 PILOT_BODY = """
 <h1>Pilot: 30 days, free</h1>
-<p class="dim">For teams whose agents pay for things. One workflow, real numbers, one honest review.</p>
+<p class="dim">For teams whose agents pay for things. One workflow, real numbers, one honest review.<br>Independently evaluated: <b>Glama rated A</b> (Healthy, 6 MCP tools, 27.10.2026).</p>
 
 <h2>What you get</h2>
 <table><tr><th>Day</th><th>Deliverable</th></tr>
@@ -292,7 +292,8 @@ party verifies offline.</p>
 <tr><td>100 parallel spends against a 50 × $0.05 budget</td><td>exactly 50 approved</td></tr>
 <tr><td>1 000 calls at $0.01 against a $5 budget</td><td>exactly 500 approved</td></tr>
 <tr><td>Injected payee, poisoned tool, runaway loop</td><td>all refused, reproducible in minutes</td></tr>
-<tr><td>Automated tests</td><td>407 passing</td></tr>
+<tr><td>Automated tests</td><td>413 passing</td></tr>
+<tr><td>External evaluation</td><td>Glama: <b>rated A</b>, Healthy, 6 tools (27.10.2026)</td></tr>
 </table>
 
 <h2>5. The market</h2>
