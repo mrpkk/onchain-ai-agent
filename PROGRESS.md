@@ -160,6 +160,10 @@ EIP-681 `payment_uri`, адрес Base-USDC, срок 72 ч. Токен и ад�
 GitHub-токены в `~/.env` не имеют права на pull request в чужой репозиторий (403). Ссылка на
 создание PR подготовлена с заголовком и телом: `/tmp/opencode/pr-url.txt`. Нужен один клик владельца.
 
+**Своя аналитика (27.10):** middleware считает просмотры HTML-страниц в тот же журнал событий:
+`{page, ref, agent}`; `/metrics` отдаёт `views.by_page`, `humans`, `crawlers`. Сторонних скриптов нет.
+Нужна, чтобы отличать «пришли люди» от «пришёл краулер» — иначе решения строятся на шуме.
+
 **Публичный MCP вырос до 6 инструментов (27.10):** `check_spend`, `open_envelope`, `get_envelope`,
 `kill_envelope`, `envelope_evidence` (пакет с воспроизводимым sha256), `policy_rules`.
 Все с аннотациями. Это прямой ответ на разбор Glama (tool count 2/5, completeness 2/5).
