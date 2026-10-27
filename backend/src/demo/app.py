@@ -824,6 +824,12 @@ Contact: hello@rta.lat
         return Response(content=path.read_bytes(), media_type="application/pdf",
                         headers={"cache-control": "public, max-age=3600"})
 
+    @app.get("/logo-400.png", response_class=Response)
+    def logo_400() -> Response:
+        path = Path(__file__).with_name("static") / "logo-400.png"
+        return Response(content=path.read_bytes(), media_type="image/png",
+                        headers={"cache-control": "public, max-age=86400"})
+
     @app.get("/og.png", response_class=Response)
     def og_image() -> Response:
         path = Path(__file__).with_name("static") / "og.png"
