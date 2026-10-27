@@ -255,6 +255,24 @@ async def kill_envelope(envelope_id: str, reason: str = "owner stop") -> str:
 
 
 @mcp.tool(
+    name="envelope_evidence",
+    title="Evidence pack for an envelope",
+    description=(
+        "Return an evidence bundle for one envelope: state, every recorded spend, the stop record "
+        "and a sha256 of the whole pack that anyone can recompute. Read-only."
+    ),
+    annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False,
+                                idempotentHint=True, openWorldHint=False),
+)
+async def envelope_evidence(envelope_id: str) -> str:
+    pack = ledger.evidence(envelope_id)
+    if pack is None:
+        return json.dumps({"error": {"code": "NOT_FOUND", "message": "envelope not found",
+                                     "retryable": False, "suggested_action": "open_envelope"}})
+    return json.dumps(pack, ensure_ascii=False)
+
+
+@mcp.tool(
     name="policy_rules",
     title="List policy rules",
     description=(

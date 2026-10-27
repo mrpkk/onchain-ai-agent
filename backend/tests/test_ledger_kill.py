@@ -61,3 +61,20 @@ def test_kill_keeps_the_first_reason():
 
 def test_kill_unknown_envelope_returns_none():
     assert ledger.kill("env_missing", reason="x") is None
+
+
+def test_evidence_pack_contains_spend_stop_and_reproducible_hash():
+    import hashlib
+    import json
+
+    eid = _open()
+    ledger.reserve(eid, amount=Decimal("0.1"), payee="api.example.com")
+    ledger.kill(eid, reason="audit")
+
+    pack = ledger.evidence(eid)
+    assert pack["totals"]["reservations"] == 1
+    assert pack["kill"]["reason"] == "audit"
+
+    claimed = pack.pop("payload_sha256")
+    canonical = json.dumps(pack, sort_keys=True, separators=(",", ":"))
+    assert hashlib.sha256(canonical.encode()).hexdigest() == claimed

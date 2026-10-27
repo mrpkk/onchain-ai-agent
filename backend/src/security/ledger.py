@@ -228,6 +228,40 @@ def kill(envelope_id: str, *, reason: str = "owner stop") -> dict | None:
     return {"envelope_id": envelope_id, "kill": {"reason": reason}, "totals": state}
 
 
+def evidence(envelope_id: str) -> dict | None:
+    """Пакет для аудитора: конверт, списания, остановка и sha256 содержимого.
+
+    Подпись Ed25519 выдаётся в квитанциях; здесь — воспроизводимый дайджест, который
+    можно пересчитать без нашего сервера.
+    """
+    state = get(envelope_id)
+    if state is None:
+        return None
+    conn = _connect()
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            "SELECT receipt_id, amount, payee, created_at FROM reservations"
+            " WHERE envelope_id=? ORDER BY created_at", (envelope_id,)).fetchall()
+        killed = conn.execute("SELECT reason, actor, killed_at FROM kills WHERE envelope_id=?",
+                              (envelope_id,)).fetchone()
+    finally:
+        conn.close()
+
+    pack = {
+        "version": "karta-evidence/1",
+        "issued_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "envelope": state,
+        "reservations": [dict(r) for r in rows],
+        "kill": dict(killed) if killed else None,
+        "totals": {"spent": state["spent"], "calls_used": state["calls_used"],
+                   "remaining": state["remaining"], "reservations": len(rows)},
+    }
+    canonical = json.dumps(pack, sort_keys=True, separators=(",", ":"))
+    pack["payload_sha256"] = hashlib.sha256(canonical.encode()).hexdigest()
+    return pack
+
+
 def parse_decimal(value: object, field: str) -> Decimal:
     try:
         result = Decimal(str(value))
