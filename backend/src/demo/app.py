@@ -112,7 +112,23 @@ def _totals() -> dict:
         by_verdict[e.get("verdict", "?")] = by_verdict.get(e.get("verdict", "?"), 0) + 1
         ref = e.get("ref") or "direct"
         by_ref[ref] = by_ref.get(ref, 0) + 1
-    return {"checks": checks, "by_verdict": by_verdict, "by_ref": by_ref}
+    views: dict[str, int] = {}
+    humans = bots = 0
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            e = json.loads(line)
+        except ValueError:
+            continue
+        if e.get("scenario") != "page_view":
+            continue
+        page = e.get("page", "?")
+        views[page] = views.get(page, 0) + 1
+        if e.get("agent") == "browser":
+            humans += 1
+        else:
+            bots += 1
+    return {"checks": checks, "by_verdict": by_verdict, "by_ref": by_ref,
+            "views": {"by_page": views, "humans": humans, "crawlers": bots}}
 
 
 router = APIRouter()
@@ -884,6 +900,25 @@ Contact: hello@rta.lat
         @app.get("/partners", response_class=HTMLResponse)
         def partners_root() -> str:  # noqa: D401
             return PARTNERS_PAGE.replace("%PREFIX%", "")
+
+    @app.middleware("http")
+    async def _page_views(request: Request, call_next):
+        response = await call_next(request)
+        try:
+            accept = request.headers.get("accept", "")
+            if (request.method == "GET" and response.status_code == 200
+                    and "text/html" in response.headers.get("content-type", "")
+                    and request.url.path not in {"/health", "/metrics"}):
+                ua = (request.headers.get("user-agent") or "").lower()
+                kind = "browser" if ("mozilla" in ua and "bot" not in ua
+                                     and "crawler" not in ua and "spider" not in ua) else "crawler"
+                _record({"ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                         "scenario": "page_view", "page": request.url.path or "/",
+                         "ref": request.query_params.get("ref", "direct")[:40],
+                         "agent": kind})
+        except Exception:  # noqa: BLE001 — аналитика не должна ломать страницу
+            pass
+        return response
 
     @app.middleware("http")
     async def _timing(request: Request, call_next):
