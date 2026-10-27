@@ -424,6 +424,15 @@ def pilot_requests(request: Request) -> JSONResponse:
                 continue
     return JSONResponse({"count": len(items), "items": items[-100:]})
 
+@router.get("/api/v1/envelopes/{envelope_id}/evidence")
+def envelope_evidence(envelope_id: str) -> JSONResponse:
+    """Пакет для аудитора: конверт, списания, остановка, воспроизводимый sha256."""
+    pack = ledger.evidence(envelope_id)
+    if pack is None:
+        return _error("not_found", "envelope not found", 404, "POST /api/v1/envelopes")
+    return JSONResponse(pack)
+
+
 @router.get("/api/v1/evidence")
 def evidence_bundle() -> JSONResponse:
     """Signed, offline-verifiable bundle of demo events (S3)."""

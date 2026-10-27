@@ -78,3 +78,11 @@ def test_evidence_pack_contains_spend_stop_and_reproducible_hash():
     claimed = pack.pop("payload_sha256")
     canonical = json.dumps(pack, sort_keys=True, separators=(",", ":"))
     assert hashlib.sha256(canonical.encode()).hexdigest() == claimed
+
+
+def test_evidence_route_parity_with_mcp():
+    """HTTP и MCP должны отдавать один и тот же пакет — расхождение = ложь в одном из каналов."""
+    eid = _open()
+    pack = ledger.evidence(eid)
+    assert pack["envelope"]["envelope_id"] == eid
+    assert pack["payload_sha256"]
