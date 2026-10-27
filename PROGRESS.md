@@ -164,6 +164,13 @@ GitHub-токены в `~/.env` не имеют права на pull request в 
 `{page, ref, agent}`; `/metrics` отдаёт `views.by_page`, `humans`, `crawlers`. Сторонних скриптов нет.
 Нужна, чтобы отличать «пришли люди» от «пришёл краулер» — иначе решения строятся на шуме.
 
+**Follow-up 6 адресатам (28.10):** не «напоминаю», а новый факт — Glama **A** и опубликованный замер.
+Glama, Merit, ElizaOS, Nevermined, Crossmint, Privy. Все с префиксом `KARTA:`, строки в
+`OUTREACH-LEDGER.csv`. Итого по KARTA: **44 касания** (39 писем + 5 служебных), ответов людей 0.
+
+**Карта площадок для продвижения:** `docs/PLATFORMS-2026-10-28.md` — что уже сделано, что требует
+логина владельца, что платно (и почему не берём).
+
 **Первая публикация на площадке (27.10):** статья на dev.to через API аккаунта владельца —
 «Your agent can pay now. Here is the layer that decides whether it should»
 (`dev.to/mrpkk/your-agent-can-pay-now-here-is-the-layer-that-decides-whether-it-should-54pg`).
