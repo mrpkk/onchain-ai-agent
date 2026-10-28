@@ -4,8 +4,8 @@
 **Status:** product is live in demo form; **0 paying customers**, **0 design partners**. This pack is
 evidence of controls, not a certification claim.
 
-**Live demo:** <https://rta.lat/karta> · **Public MCP:** `https://rta.lat/karta/mcp` ·
-**Receipt verify:** <https://rta.lat/karta/verify> · **Evidence:** `/karta/evidence/<id>`
+**Live demo:** <https://karta.rta.lat> · **Public MCP:** `https://karta.rta.lat/mcp` ·
+**Receipt verify:** <https://karta.rta.lat/verify> · **Evidence:** `/api/v1/envelopes/<id>/evidence` · **Registry:** `lat.rta.karta/guard` (Glama rated A)
 
 **Legal:** SLA and DPA sections are **drafts**. They require legal review before signature. No
 SOC 2, ISO 27001, or regulatory approval is claimed.
@@ -17,14 +17,14 @@ SOC 2, ISO 27001, or regulatory approval is claimed.
 | # | Question | Answer (as built) | Evidence |
 |---|---|---|---|
 | 1 | Who owns the keys? | The gateway, never the model. Agent asks;KeyVault/Fernet stores the key outside the prompt and outside the receipt. | `backend/src/security/keyvault.py`; no key in logs/responses |
-| 2 | Where is the policy enforced? | Outside the model: deterministic Dharma Engine → `ALLOW / HOLD / BLOCK` + rule number. | `backend/src/security/envelope.py` E01–E07; demo `/karta` |
+| 2 | Where is the policy enforced? | Outside the model: deterministic Dharma Engine → `ALLOW / HOLD / BLOCK` + rule number. | `backend/src/security/envelope.py` E01–E07 + `ledger.kill` → E08; demo `karta.rta.lat` |
 | 3 | Can the model override a block? | No. A `BLOCK` is not re-askable from the model; only a human approval surface can change the outcome. | `backend/src/agent/core.py`; SPEC v4 invariant #3 |
 | 4 | What if the model is compromised? | The task envelope caps budget, per-call amount, call count, payees, subscriptions and expiry. Prompt injection cannot grant a new payee. | `/karta/api/v1/x402/check`; E02/E03/E04/E05/E06 |
 | 5 | How do you stop an agent? | Operator kill switch: `POST /karta/api/v1/kill`; demo/API/MCP return `503 kill_switch`; runtime hard-kill; no auto-resume. | `backend/src/security/killswitch.py`; test <2 s |
 | 6 | Where is the audit log? | Sakshi Log: append-only HMAC chain, hash + prev_hash per event; export JSON/CSV. | `backend/src/security/sakshi.py`; `docs/SECURITY.md` |
 | 7 | How can we verify without trusting you? | Ed25519-signed receipts and evidence packages; public key inside; `/karta/verify` checks in the browser; server can be offline. | `security/evidence.py`; `31c2d1c`; `/karta/verify` |
 | 8 | What data leaves the environment? | Demo metrics: scenario id, verdict, rule, ref, evidence id. No keys, prompts, or wallet secrets. Hosted mode is configurable; define retention in DPA. | `/karta/metrics`; evidence package excludes payloads |
-| 9 | What is the blast radius of one task? | One envelope: `budget_total`, `per_call_max`, `calls_max`, allowlist, commitments, expiry, approval threshold. A failure is capped at that task. | `docs/ARCHITECTURE.md`; E01–E07 |
+| 9 | What is the blast radius of one task? | One envelope: `budget_total`, `per_call_max`, `calls_max`, allowlist, commitments, expiry, approval threshold. A failure is capped at that task. | `docs/ARCHITECTURE.md`; E01–E08 |
 | 10 | Multi-tenant isolation? | API/MCP data is scoped to the owner API key; foreign agent ids return 404. The public demo is stateless and stores no tenant data. | `backend/src/mcp/server.py`; tests |
 | 11 | What SLA can you offer? | Draft: 99.5% monthly for hosted pilot, 1-business-day response, incident report within 48 h. **Not yet measured; legal review required.** | SLA draft below |
 | 12 | Which certifications? | None claimed. We provide controls, logs, receipts and a threat model; a buyer’s security team performs its own review. | `docs/SECURITY.md`, `docs/THREAT_MODEL.md` |
@@ -67,8 +67,8 @@ SOC 2, ISO 27001, or regulatory approval is claimed.
 |---|---:|---|
 | Open | $0 | MCP, 20 checks/day, demo, local run |
 | Team | **$99/mo** (India $49) | hosted control plane, 5 000 checks/mo, 5 envelopes, evidence export |
-| Pilot | **$2 500** one-time, 14 days | install, 3 policies, 1 integration, findings report, 30 days support |
-| Enterprise | **from $25 000/year** | white-label, SSO, private deployment, 5 checks in one entry, SLA |
+| Pilot | **$2 500** one-time, **30 days** | install, 1–3 envelopes, 1 integration, written review, 30 days support |
+| Enterprise | **from $25 000/year** | white-label, private deployment, 5 checks in one entry, SLA · **SSO — roadmap, not shipped** |
 | Retainer | **$1 500/mo** | monthly reconciliation, new rules, incident review |
 
 ---
@@ -104,6 +104,14 @@ SOC 2, ISO 27001, or regulatory approval is claimed.
 This is the artifact a buyer can put in front of an auditor without trusting KARTA’s dashboard.
 
 ---
+
+## Known gaps (as of 28.10.2026)
+
+- **No SSO / SCIM** — roadmap; today auth is API keys.
+- **No SOC 2 / ISO 27001**, no third-party penetration test yet.
+- **No multi-region hosting**, single host with an uptime target, not a measured history.
+- **Receipts are per spend**; reconciliation across rails exists as a product but is not automated end-to-end.
+- **Public demo shares one ledger** for envelope creation; paid deployments run a separate instance.
 
 ## What we do not claim
 
