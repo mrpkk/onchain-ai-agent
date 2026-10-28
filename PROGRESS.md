@@ -168,8 +168,9 @@ GitHub-токены в `~/.env` не имеют права на pull request в 
 есть), но генерация отчёта и чат с REX AI требуют входа через Privy-iframe. Блокер не снят; кредит
 Superteam не потрачен. Заявка готова, нужна ссылка на отчёт.
 
-**RWA-волна 2 (28.10):** Mountain Protocol (`support@`), Bitbond (`service@`) — отправлены по шаблону 2
-(пилот $2 500). **Superstate** — сайт отдаёт 403 (Cloudflare), канала нет; **Centrifuge** — 403.
+**RWA-волна 2 (28.10):** Bitbond (`service@`) — отправлено. **Mountain:** первый адрес
+`support@mountain-protocol.com` дал **NXDOMAIN** (домен неверный) — переотправлено на
+`sales@mountainprotocol.com` (правильный домен, подтверждён MX + сайт). **Superstate** — сайт отдаёт 403 (Cloudflare), канала нет; **Centrifuge** — 403.
 Итого RWA-писам: 4 отправлено (Backed, Tokeny, Mountain, Bitbond), 2 недоступны.
 
 **Проверка доступов браузером (28.10, вечер):**
