@@ -340,8 +340,8 @@ payments at your company, or one introduction to a team whose agents already pay
 
 OFFER_BODY = """
 <h1>What you can buy, and what it costs</h1>
-<p class="dim">Written offer. Payment in USDC. RU cards — invoice by email on request.
-No subscription traps: every line has a scope and a refund rule.</p>
+<p class="dim">Written offer. Payment in <b>USDC only</b>. No subscription traps: every line has a scope,
+a price and a refund rule.</p>
 
 <table>
 <tr><th>Item</th><th>Price</th><th>What you get</th></tr>
@@ -366,8 +366,9 @@ The verifier stays with you.</td></tr>
 <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('addr').innerText)">Copy address</button></p>
 <p class="dim">Verify first 6 and last 4 characters against this page before sending. The address is never
 sent in chat. Network: Base only; other networks by written agreement.</p>
-<p><b>RU cards / ЮMoney</b> — requisites are sent in the invoice email after you confirm the scope.
-We do not publish card details on a public page.</p>
+<p><b>Crypto only.</b> No cards, no YooMoney, no bank transfer — we invoice in USDC and nothing else.
+If your finance team needs a different rail, say so before ordering and we will tell you honestly that
+we cannot take it yet.</p>
 
 <h2>What happens after payment</h2>
 <p>Within 24 hours: transaction confirmed on Basescan (or card receipt), kickoff scheduled, scope frozen
