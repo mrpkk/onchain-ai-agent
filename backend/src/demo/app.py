@@ -805,6 +805,13 @@ Contact: hello@rta.lat
         return shell("KARTA pilot — 30 days, free", PILOT_BODY, path="/pilot",
               description="30 days free for teams whose agents pay: one envelope, the guard, a kill-switch drill and a written review. No lock-in.")
 
+    @app.get(f"{prefix}/offer", response_class=HTMLResponse)
+    def offer_page() -> str:  # noqa: D401
+        from .pages import OFFER_BODY, shell
+
+        return shell("KARTA — prices and how to pay", OFFER_BODY, path="/offer",
+                     description="Audit $500, KARTA pilot $2,500, attest $99/mo. USDC on Base, invoice by email.")
+
     @app.get(f"{prefix}/deck", response_class=HTMLResponse)
     def deck_page() -> str:  # noqa: D401
         from .pages import DECK_BODY, shell
@@ -834,6 +841,7 @@ Contact: hello@rta.lat
               description="How KARTA differs from spendshield, toolwrit, DashClaw and agentic-wallet-guardian — quoted from their own descriptions.")
 
     if prefix:  # поддомен обслуживает те же страницы с корня
+        app.add_api_route("/offer", offer_page, response_class=HTMLResponse)
         app.add_api_route("/deck", deck_page, response_class=HTMLResponse)
         app.add_api_route("/hi/pilot", pilot_hi_page, response_class=HTMLResponse)
         app.add_api_route("/report", report_page, response_class=HTMLResponse)

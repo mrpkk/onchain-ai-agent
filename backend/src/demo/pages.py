@@ -336,3 +336,52 @@ payments at your company, or one introduction to a team whose agents already pay
 <a class="cta" href="/report">See the survey</a>
 <a class="cta" href="/attacks">Run the attacks</a>
 """
+
+
+OFFER_BODY = """
+<h1>What you can buy, and what it costs</h1>
+<p class="dim">Written offer. Payment in USDC. RU cards — invoice by email on request.
+No subscription traps: every line has a scope and a refund rule.</p>
+
+<table>
+<tr><th>Item</th><th>Price</th><th>What you get</th></tr>
+<tr><td><b>Spend audit</b></td><td><b>$500</b>, 5 business days</td>
+<td>One month of your agent logs: duplicates, failed-but-billed, quote-vs-settled, missing refunds.
+Report with exact leaks and fix order; if it finds nothing, it says so.</td></tr>
+<tr><td><b>KARTA pilot</b></td><td><b>$2 500</b>, 30 days</td>
+<td>One workflow: signed task envelope, guard in front of paid calls, kill-switch drill, evidence pack,
+written review with numbers. Refund 100 % if the first envelope is not live in 5 business days.</td></tr>
+<tr><td><b>Reserve attestation</b></td><td><b>$2 500</b>, 30 days</td>
+<td>One asset: Ed25519-signed attestation over a reserve snapshot, source hashes, methodology, retest.
+The verifier stays with you.</td></tr>
+<tr><td><b>attest</b> subscription</td><td><b>$99/month</b></td>
+<td>Artifact verification: schema, emptiness, provenance, authority. Cancel anytime.</td></tr>
+<tr><td><b>KARTA</b> subscription</td><td><b>$299/month</b></td>
+<td>Hosted control plane: envelopes, kill switch, receipts, evidence export.</td></tr>
+</table>
+
+<h2>How to pay</h2>
+<p><b>USDC on Base</b> (chain id 8453), exact amount, one invoice per item:<br>
+<code id="addr">0xefCD6886f73064ea9EcbaA4741Ef1309A0885C59</code>
+<button type="button" onclick="navigator.clipboard.writeText(document.getElementById('addr').innerText)">Copy address</button></p>
+<p class="dim">Verify first 6 and last 4 characters against this page before sending. The address is never
+sent in chat. Network: Base only; other networks by written agreement.</p>
+<p><b>RU cards / ЮMoney</b> — requisites are sent in the invoice email after you confirm the scope.
+We do not publish card details on a public page.</p>
+
+<h2>What happens after payment</h2>
+<p>Within 24 hours: transaction confirmed on Basescan (or card receipt), kickoff scheduled, scope frozen
+in writing. Deliverables are listed in the invoice; nothing is "best effort".</p>
+
+<h2>Refund</h2>
+<p>Audit: full refund if the report is not delivered in 5 business days. Pilot and attestation: full refund
+if the first deliverable is not live in 5 business days. After that the work is done and the payment is final.</p>
+
+<h2>What we do not do</h2>
+<p>No token, no custody, no money transmission. No "100 % safety". No promises about token price or returns.
+No named customers until they agree in writing.</p>
+
+<a class="cta" href="mailto:hello@rta.lat?subject=KARTA%20order">Order by email</a>
+<a class="cta" href="/pilot">Pilot details</a>
+<a class="cta" href="/report">The survey behind this</a>
+"""
