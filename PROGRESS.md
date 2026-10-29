@@ -164,6 +164,11 @@ GitHub-токены в `~/.env` не имеют права на pull request в 
 `{page, ref, agent}`; `/metrics` отдаёт `views.by_page`, `humans`, `crawlers`. Сторонних скриптов нет.
 Нужна, чтобы отличать «пришли люди» от «пришёл краулер» — иначе решения строятся на шуме.
 
+**Lead Bot опубликован (29.10):** страница `karta.rta.lat/leadbot` ($1 500 + $299/мес, три сценария),
+пост в канал **@pravritti_agents** отправлен через **@pravritti_bot** (администратор, message_id 567).
+Telegram API доступен только через Tor SOCKS (`socks5h://127.0.0.1:9050`) — прямой запрос молчит,
+это записано как рабочий приём.
+
 **Аудит отправлений (29.10):** RWA — 5 писем (Backed, Tokeny, Mountain, Bitbond), плюс Superstate на
 `comms@`; bounce по этим адресам нет, ответов 0. Найдена **битая ссылка** в письме Superstate:
 `attest.rta.lat/sample-report` → 404; рабочие — `/demo`, `/docs` и
