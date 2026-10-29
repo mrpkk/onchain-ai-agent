@@ -805,6 +805,13 @@ Contact: hello@rta.lat
         return shell("KARTA pilot — 30 days, free", PILOT_BODY, path="/pilot",
               description="30 days free for teams whose agents pay: one envelope, the guard, a kill-switch drill and a written review. No lock-in.")
 
+    @app.get(f"{prefix}/leadbot", response_class=HTMLResponse)
+    def leadbot_page() -> str:  # noqa: D401
+        from .pages import LEADBOT_BODY, shell
+
+        return shell("Lead bot — answers, qualifies, hands over", LEADBOT_BODY, path="/leadbot",
+                     description="Telegram lead bot: 24/7 answers, qualification, handover to a manager, CRM record. $1,500 setup + $299/mo.")
+
     @app.get(f"{prefix}/offer", response_class=HTMLResponse)
     def offer_page() -> str:  # noqa: D401
         from .pages import OFFER_BODY, shell
@@ -841,6 +848,7 @@ Contact: hello@rta.lat
               description="How KARTA differs from spendshield, toolwrit, DashClaw and agentic-wallet-guardian — quoted from their own descriptions.")
 
     if prefix:  # поддомен обслуживает те же страницы с корня
+        app.add_api_route("/leadbot", leadbot_page, response_class=HTMLResponse)
         app.add_api_route("/offer", offer_page, response_class=HTMLResponse)
         app.add_api_route("/deck", deck_page, response_class=HTMLResponse)
         app.add_api_route("/hi/pilot", pilot_hi_page, response_class=HTMLResponse)

@@ -386,3 +386,71 @@ No named customers until they agree in writing.</p>
 <a class="cta" href="/pilot">Pilot details</a>
 <a class="cta" href="/report">The survey behind this</a>
 """
+
+
+LEADBOT_BODY = """
+<h1>Lead bot: answers, qualifies, hands over</h1>
+<p class="dim">A Telegram bot that replies to incoming requests 24/7, asks the qualifying questions,
+scores the lead, hands it to a manager with a short brief — and writes the record to your CRM.</p>
+
+<table>
+<tr><th>What</th><th>Detail</th></tr>
+<tr><td>Setup</td><td><b>$1,500</b> — 3–5 business days, one scenario, your questions, your CRM</td></tr>
+<tr><td>Monthly</td><td><b>$299</b> — hosting, model costs, edits to the script, monthly report</td></tr>
+<tr><td>Handover</td><td>message to the manager with name, need, budget band, urgency, transcript link</td></tr>
+<tr><td>CRM</td><td>Bitrix24, amoCRM, HubSpot, Notion, Google Sheets — webhook or native API</td></tr>
+<tr><td>Language</td><td>RU / EN (Hindi on request)</td></tr>
+<tr><td>What it does not do</td><td>does not close the deal and does not promise the client anything; it qualifies and hands over</td></tr>
+</table>
+
+<h2>Three scenarios (real dialogues, shortened)</h2>
+
+<h3>1. Clinic</h3>
+<pre>Client: Здравствуйте, сколько стоит имплантация?
+Bot:     Подскажу по вашей ситуации — это верхняя или нижняя челюсть и сколько зубов?
+Client: Один зуб, нижняя.
+Bot:     Понял. Имплант с коронкой — от 45 000 ₽. Когда планируете и есть ли КТ?
+Client: Через месяц, КТ нет.
+Bot:     Тогда первый шаг — консультация и КТ, это 3 500 ₽. Записать на этой неделе?
+Client: Да, в субботу удобно.
+→ CRM: лид «имплант, 1 зуб, нижняя», бюджет 45–60k, срочность «месяц», запись «суббота»,
+  передан администратору с транскриптом.</pre>
+
+<h3>2. Agency</h3>
+<pre>Client: Нужен сайт для стоматологии.
+Bot:     Сделаем. Сайт визитка, запись к врачу или интернет-магазин?
+Client: С записью. И чтобы заявки в WhatsApp падали.
+Bot:     Понял. Сколько врачей и есть ли готовые фото/тексты?
+Client: 4 врача, текстов нет.
+Bot:     Тогда нужен копирайт — это +15 000 ₽. Бюджет комфортный до 150 000 ₽?
+Client: До 120.
+→ CRM: лид «сайт стоматологии + запись + WhatsApp», бюджет 120k, контент нужен,
+  передан аккаунт-менеджеру.</pre>
+
+<h3>3. School</h3>
+<pre>Client: Есть курсы подготовки к ЕГЭ?
+Bot:     Да. Какой класс и какие предметы?
+Client: 11 класс, математика и информатика.
+Bot:     Есть группа и индивидуально. Пробное занятие бесплатно. Удобнее вечером или в выходные?
+Client: В выходные.
+Bot:     Записал на субботу 12:00. Напомню за день.
+→ CRM: лид «ЕГЭ 11 класс, математика+информатика», пробное «сб 12:00», передан методисту.</pre>
+
+<h2>Demo</h2>
+<p>Working bot on the same stack: <a href="https://t.me/TgBotAiQ_bot">@TgBotAiQ_bot</a> — it answers
+questions and keeps context. The three dialogues above are the qualification scenarios; a full clinic
+scenario is configured in 3–5 days after the questions and CRM are agreed.</p>
+<p class="dim">Honest note: the demo bot is a general assistant, not a pre-built clinic bot. We do not
+show a fake "live client" — we show what the bot says and what lands in the CRM.</p>
+
+<h2>How it starts</h2>
+<ol>
+<li>30 minutes: questions your manager asks, and what counts as a qualified lead.</li>
+<li>3–5 days: scenario, CRM webhook, handover format.</li>
+<li>Week 2: review — what it asked, what it missed, one revision.</li>
+</ol>
+
+<a class="cta" href="mailto:hello@rta.lat?subject=Lead%20bot">Order by email</a>
+<a class="cta" href="https://t.me/TgBotAiQ_bot">Open the demo bot</a>
+<a class="cta" href="/offer">All prices</a>
+"""
