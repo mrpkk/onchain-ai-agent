@@ -164,6 +164,13 @@ GitHub-токены в `~/.env` не имеют права на pull request в 
 `{page, ref, agent}`; `/metrics` отдаёт `views.by_page`, `humans`, `crawlers`. Сторонних скриптов нет.
 Нужна, чтобы отличать «пришли люди» от «пришёл краулер» — иначе решения строятся на шуме.
 
+**Аудит отправлений (29.10):** RWA — 5 писем (Backed, Tokeny, Mountain, Bitbond), плюс Superstate на
+`comms@`; bounce по этим адресам нет, ответов 0. Найдена **битая ссылка** в письме Superstate:
+`attest.rta.lat/sample-report` → 404; рабочие — `/demo`, `/docs` и
+`mrpkk.github.io/nidhipati/sample-reserve-report.html`; поправка отправлена тем же тредом.
+Проверены ссылки: `attest.rta.lat` 200, `karta.rta.lat/report` 200, `rta.lat/audit/` 200,
+**`attest.rta.lat/audit` 404 — не использовать**. Цена $2 500 совпадает с `/offer`.
+
 **RaptorX, вторая попытка (28.10):** публичная таблица Solana грузится (SOL/SOL — #1, колонка AI Report
 есть), но генерация отчёта и чат с REX AI требуют входа через Privy-iframe. Блокер не снят; кредит
 Superteam не потрачен. Заявка готова, нужна ссылка на отчёт.
