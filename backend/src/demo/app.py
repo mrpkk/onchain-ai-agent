@@ -770,7 +770,6 @@ Every allowed spend returns an Ed25519 receipt that verifies offline.
 - POST /api/v1/envelopes           {"budget_total":"2.50","per_call_max":"0.05","calls_max":2000,"allowlist":["api.example.com"],"ttl_hours":2}
 - POST /api/v1/envelopes/{id}/spend {"amount":"0.05","payee":"api.example.com"}
 - GET  /api/v1/envelopes/{id}      state: spent, remaining, calls_used
-- POST /api/v1/envelopes/{id}/kill {"reason":"runaway loop"}
 - GET  /api/v1/evidence/{id}       evidence bundle, offline-verifiable
 - GET  /api/v1/evidence            event bundle with hash chain
 - POST /api/v1/kill                {"active":true|false} operator stop for all verdicts
@@ -779,7 +778,7 @@ Every allowed spend returns an Ed25519 receipt that verifies offline.
 ## Rules (deterministic, rule ids are stable)
 E01 envelope_expired · E02 subscription_not_permitted · E03 payee_not_allowed ·
 E04 per_call_exceeded · E05 calls_exhausted · E06 budget_exceeded ·
-E07 above_approval_threshold · E08 envelope_killed (reserved)
+E07 above_approval_threshold · (E08 envelope_killed зарезервирован: endpoint ещё не реализован)
 
 ## Honest state
 Pre-revenue. No paying customers. The invariant is proven by tests: 100 parallel spend requests
