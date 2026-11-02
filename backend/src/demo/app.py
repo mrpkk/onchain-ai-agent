@@ -206,6 +206,14 @@ def kill_status() -> dict:
 
 @router.post("/api/v1/kill")
 async def kill_set(request: Request) -> JSONResponse:
+    # 02.11.2026: kill-switch был открыт всем — любой внешний запрос гасил демо.
+    # Теперь: локально можно, извне — только с токеном оператора из env.
+    import os as _os
+    token = _os.getenv("KARTA_OPERATOR_TOKEN", "")
+    client = (request.client.host if request.client else "") or ""
+    supplied = request.headers.get("x-operator-token", "")
+    if client not in ("127.0.0.1", "::1") and not (token and supplied == token):
+        return JSONResponse({"error": "operator token required"}, status_code=403)
     body = await request.json()
     state = killswitch.set_active(bool(body.get("active", True)), str(body.get("reason", "")))
     _record({"ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -688,14 +696,22 @@ No wallet, no funds, no signup.</p>
 <div class="out" id="out"><small>Pick a scenario. The envelope and the request are shown; the verdict is produced by the same engine the API and MCP use.</small></div>
 <p style="margin-top:28px"><small>Free tier: 20 checks a day · <a href="https://rta.lat/nidhipati/">spend audit</a> · <a href="https://attest.rta.lat/">signed receipts</a> · <a href="mailto:hello@rta.lat?subject=KARTA%20pilot">run a 30-day pilot</a></small></p>
 </main><script>
-const P=%PREFIX%;
+const P=%PREFIX%;  // подставляется как JSON-строка: "" или "/karta"
 async function run(id){
   const out=document.getElementById('out');
   out.innerHTML='<small>checking…</small>';
   const r=await fetch(P+'/api/check?ref=demo',{method:'POST',headers:{'content-type':'application/json'},
     body:JSON.stringify({scenario:id})});
   const d=await r.json();
-  if(!d.verdict){out.textContent=JSON.stringify(d);return}
+  // Пока оператор остановил демо, клиент видит человеческий отказ, а не сырой
+  // JSON: kill-guard не должен выглядеть как поломка страницы (03.11.2026).
+  if(!d.verdict){
+    const e=d.error||{};
+    out.innerHTML=`<div class="v DENY">${e.code||'error'}</div>
+    <dl><dt>reason</dt><dd>${e.message||'request refused'}</dd>
+    <dt>next</dt><dd>${e.suggested_action||'try again later'}</dd></dl>`;
+    return;
+  }
   const v=d.verdict;
   out.innerHTML=`<div class="v ${v.verdict}">${v.verdict}</div>
   <dl><dt>rule</dt><dd>${v.rule}</dd>
@@ -913,20 +929,20 @@ Contact: hello@rta.lat
 
     @app.get(prefix or "/", response_class=HTMLResponse)
     def page() -> str:  # noqa: D401
-        return PAGE.replace("%PREFIX%", prefix)
+        return PAGE.replace("%PREFIX%", json.dumps(prefix or ""))
 
     @app.get(f"{prefix}/partners", response_class=HTMLResponse)
     def partners_page() -> str:  # noqa: D401
-        return PARTNERS_PAGE.replace("%PREFIX%", prefix)
+        return PARTNERS_PAGE.replace("%PREFIX%", json.dumps(prefix or ""))
 
     if prefix:
         @app.get("/", response_class=HTMLResponse)
         def page_root() -> str:  # noqa: D401
-            return PAGE.replace("%PREFIX%", "")
+            return PAGE.replace("%PREFIX%", json.dumps(""))
 
         @app.get("/partners", response_class=HTMLResponse)
         def partners_root() -> str:  # noqa: D401
-            return PARTNERS_PAGE.replace("%PREFIX%", "")
+            return PARTNERS_PAGE.replace("%PREFIX%", json.dumps(""))
 
     @app.middleware("http")
     async def _page_views(request: Request, call_next):
