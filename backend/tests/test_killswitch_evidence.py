@@ -32,7 +32,9 @@ from src.security import killswitch  # noqa: E402
 def client():
     killswitch.reset()
     demo._CREATES.clear()
-    with TestClient(create_app()) as c:
+    # kill-switch с 02.11.2026 разрешён только локальному оператору:
+    # подставляем localhost, иначе TestClient приходит как «testclient» и получает 403
+    with TestClient(create_app(), client=("127.0.0.1", 50000)) as c:
         yield c
     killswitch.reset()
 

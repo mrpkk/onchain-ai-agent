@@ -23,7 +23,8 @@ CHALLENGE = {"accepts": [{
 
 def _client() -> TestClient:
     killswitch.reset()
-    return TestClient(create_app(""))
+    # локальный оператор: kill-switch с 02.11.2026 пускает только 127.0.0.1
+    return TestClient(create_app(""), client=("127.0.0.1", 50000))
 
 
 def _envelope(client, budget="0.02") -> str:
