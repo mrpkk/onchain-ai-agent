@@ -3,6 +3,11 @@
 > Источник истины — код. Документ фиксирует, что реализовано и чем проверяется.
 > Модель угроз: [THREAT_MODEL.md](THREAT_MODEL.md) (STRIDE, T1–T12). Аудит: [AUDIT_REPORT.md](AUDIT_REPORT.md).
 
+**Область действия (важно).** Ниже описан **аутентифицированный KARTA API** (self-hosted / пилотная
+инсталляция): ключи, JWT, Dharma-гейты, Sakshi, контракты. **Публичное демо `karta.rta.lat` — другой
+контур**: без аккаунтов, без ключей, без денег, с общим ledger и лимитом 10 конвертов/мин на IP
+(см. §9). Не переносите утверждения из §1–§6 на демо — там их просто нет.
+
 ## 1. Секреты и ключи
 
 | Слой | Реализация |
@@ -42,20 +47,32 @@
 
 ## 6. Контракты
 
-- 56 hardhat-тестов (agent-контракты, timelock, escrow, mock), mock-режим без реальных сетей.
+- **76 hardhat-тестов** (agent-контракты, timelock, escrow, mock) — прогон 28.10: `76 passing (6s)`.
 - **Slither** — fail on high; **Aderyn** — soft-check; в CI на каждый push.
 
 ## 7. CI-гейты
 
 | Гейт | Команда | Режим |
 |---|---|---|
-| Backend tests | `pytest backend/tests -q` (218) | fail |
+| Backend tests | `pytest backend/tests -q` (**413**, проверено 28.10) | fail |
 | SAST | `bandit -r backend/src --severity-level medium` | fail (0 находок) |
 | Dep-audit | `pip-audit -r backend/requirements.txt` | fail (0 уязвимостей) |
 | Секреты | `gitleaks` + hex-scan | fail |
-| Контракты | `npx hardhat test` (56) | fail |
+| Контракты | `npx hardhat test` (**76 passing**, проверено 28.10) | fail |
 | Slither | высокие severity | fail |
 | Aderyn | отчёт | soft |
+
+## 9. Публичное демо и MCP (отдельный контур)
+
+| Свойство | Как есть |
+|---|---|
+| Аутентификация | нет; анонимные вызовы, лимит 10 конвертов/мин на IP |
+| Ключи и деньги | не принимает, не хранит, не подписывает транзакции |
+| Данные | общий SQLite-ledger демо; персональных данных нет |
+| MCP | remote `https://karta.rta.lat/mcp`, 6 инструментов, аннотации read-only/destructive |
+| Остановка | глобальный `POST /api/v1/kill` и остановка отдельного конверта (`E08`) |
+| Проверяемость | квитанции Ed25519 и пакеты evidence — офлайн, без нашего сервера |
+| Внешняя оценка | Glama: **A**, Healthy (27.10) |
 
 ## 8. Честные ограничения (не выдавать за готовое)
 

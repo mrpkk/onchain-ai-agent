@@ -13,6 +13,9 @@ os.environ.setdefault("DEBUG", "true")
 os.environ.setdefault("TX_JITTER_MAX_SECONDS", "0")  # тесты не спят
 _TEST_DB_DIR = tempfile.mkdtemp(prefix="karta-tests-")
 os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{_TEST_DB_DIR}/test.db")
+# KARTA demo: не писать в боевые файлы и не тащить состояние между тестами
+os.environ.setdefault("KARTA_LEDGER_DB", f"{_TEST_DB_DIR}/karta-ledger.db")
+os.environ.setdefault("KARTA_DEMO_EVENTS", f"{_TEST_DB_DIR}/karta-events.jsonl")
 
 import pytest  # noqa: E402
 
@@ -29,4 +32,22 @@ def _reset_api_state():
         main_module._refresh_store = RefreshStore()
     except Exception:
         pass
+    try:
+        from src.demo import app as demo_app
+
+        demo_app._CREATES.clear()  # лимитер конвертов не должен протекать между тестами
+    except Exception:
+        pass
+    try:
+        from src.security import killswitch
+
+        killswitch.reset()
+    except Exception:
+        pass
     yield
+    try:
+        from src.security import killswitch
+
+        killswitch.reset()
+    except Exception:
+        pass

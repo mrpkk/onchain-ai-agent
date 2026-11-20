@@ -1,0 +1,12 @@
+name,type,site,contact,status,notes
+Glama,platform,https://glama.ai/mcp/connectors,,not_contacted,directory / white-label
+Smithery,platform,https://smithery.ai,,not_contacted,channel closing 31.10 verify
+Coinbase Developer Platform,platform,https://www.coinbase.com/developer-platform,,not_contacted,x402/AgentKit
+Circle,platform,https://www.circle.com,,not_contacted,USDC agent payments
+Virtuals,platform,https://virtuals.io,,not_contacted,agent platform
+Olas,platform,https://olas.network,,not_contacted,agent platform
+Franklin,design_partner,https://github.com/BlockRunAI/Franklin,hello@blockrun.ai,not_contacted,public SECURITY.md
+Agent402,design_partner,https://github.com/MikeyPetrillo/Agent402,mike@agent402.tools,not_contacted,public README
+Bindu,design_partner,https://github.com/GetBindu/Bindu,https://github.com/GetBindu/Bindu/issues/615,cold_no_response,do not re-contact without new finding
+Daydreams,design_partner,https://github.com/daydreamsai/daydreams,https://github.com/daydreamsai/daydreams/issues/708,cold_no_response,do not re-contact without new finding
+OneShot,design_partner,https://github.com/oneshot-agent/sdk,https://github.com/oneshot-agent/sdk/issues/7,cold_no_response,do not re-contact without new finding
