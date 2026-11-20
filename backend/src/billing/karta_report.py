@@ -19,6 +19,7 @@ import os
 import re
 import smtplib
 import ssl
+import tempfile
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from pathlib import Path
@@ -221,7 +222,7 @@ def deliver(snapshot_path: Path, out_dir: Path, email: str = "", send: bool = Fa
 def main() -> int:
     ap = argparse.ArgumentParser(description="Собрать и (по флагу) отправить отчёт KARTA")
     ap.add_argument("--snapshot", default="scripts/registry_snapshot.json")
-    ap.add_argument("--out", default="/tmp/karta-report")
+    ap.add_argument("--out", default=os.path.join(tempfile.gettempdir(), "karta-report"))
     ap.add_argument("--email", default="")
     ap.add_argument("--send", action="store_true")
     a = ap.parse_args()
