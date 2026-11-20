@@ -844,3 +844,6 @@ cd /media/Sruti/iamthat/work/onchain-ai-agent/backend
    дыра не возвращается.
 
 **Следствие:** условие «зелёный сьют» для вливания `feature/v2-modernization` в `main` выполнено.
+
+**Merge выполнен:** `feature/v2-modernization` → `main` (`0664049`), затем подтянут remote main
+(`33fd4bb`). На `main` полный прогон: **420 passed, 1 skipped** (76 с). `main` запушен.
