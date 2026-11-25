@@ -109,8 +109,30 @@ def main() -> None:
         print("3) refund:", status(2), "| заказчику +", balance(PAYER[0]) - before)
         assert status(2)[0] == "refunded" and balance(PAYER[0]) - before == 3000
 
-        assert escrow.functions.nextEscrowId().call() == 3
-        print("ИТОГ: Escrow-цикл на anvil — УСПЕХ (release / dispute+resolve / refund)")
+        # 4) отказ: после возврата release невозможен — деньги уже вернулись, второй раз не уйдут
+        before_agent = balance(AGENT[0])
+        try:
+            send(w3, escrow.functions.release(2), PAYER[1])
+            raise AssertionError("release после refund не должен проходить")
+        except Exception as exc:  # noqa: BLE001 — ожидаемый revert контракта
+            print("4) отказ release после refund:", type(exc).__name__,
+                  "| агенту +", balance(AGENT[0]) - before_agent)
+            assert balance(AGENT[0]) - before_agent == 0, "деньги не должны двинуться"
+
+        # 5) отказ: спор замораживает возврат — refund после dispute отклоняется
+        send(w3, escrow.functions.createEscrow(AGENT[0], token.address, 4000), PAYER[1])
+        send(w3, escrow.functions.dispute(3), PAYER[1])
+        before_payer = balance(PAYER[0])
+        try:
+            send(w3, escrow.functions.refund(3), PAYER[1])
+            raise AssertionError("refund после dispute не должен проходить")
+        except Exception as exc:  # noqa: BLE001 — ожидаемый revert контракта
+            print("5) отказ refund после dispute:", type(exc).__name__,
+                  "| заказчику +", balance(PAYER[0]) - before_payer)
+            assert balance(PAYER[0]) - before_payer == 0, "замороженные деньги не должны двинуться"
+
+        assert escrow.functions.nextEscrowId().call() == 4
+        print("ИТОГ: Escrow-цикл на anvil — УСПЕХ (release / dispute+resolve / refund / 2 отказа)")
     finally:
         anvil.terminate()
         anvil.wait(timeout=10)

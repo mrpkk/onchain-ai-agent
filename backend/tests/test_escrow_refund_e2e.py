@@ -1,4 +1,4 @@
-"""Возврат денег на настоящей цепи: anvil + развёрнутый Escrow, без мока сервиса.
+"""Возврат и отказ на настоящей цепи: anvil + развёрнутый Escrow, без мока сервиса.
 
 Зачем отдельный файл. До 26.11.2026 возврат проверялся только моками
 (`test_refund_runbook.py` подменяет `EscrowService.refund`), то есть проверял API, а не
@@ -38,3 +38,6 @@ def test_refund_returns_money_on_a_real_chain():
     assert proc.returncode == 0, out[-800:]
     assert "ИТОГ: Escrow-цикл на anvil — УСПЕХ" in out, out[-800:]
     assert "3) refund: ('refunded', 3000)" in out, "возврат не вернул сумму заказчику"
+    # Отказ: после возврата release невозможен, после спора — refund. Деньги не двигаются.
+    assert "4) отказ release после refund" in out and "агенту + 0" in out
+    assert "5) отказ refund после dispute" in out and "заказчику + 0" in out
