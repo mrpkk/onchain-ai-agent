@@ -73,6 +73,18 @@ an hour, reply to this message and we will check the chain again.
 
 ## Проверено
 
+26.11.2026: **возврат прогнан на настоящей цепи**, не в моке. Сценарий `create → refund` из
+`scripts/escrow_anvil_flow.py` на anvil: `3) refund: ('refunded', 3000) | заказчику + 3000` — статус
+`refunded`, сумма вернулась заказчику полностью, `release` и `dispute+resolve` в том же прогоне зелёные.
+Повторить одной командой:
+
+```
+pytest -m slow backend/tests/test_escrow_refund_e2e.py
+```
+
+До этого возврат был покрыт только моками: `test_refund_runbook.py` подменяет `EscrowService.refund` и
+проверяет API, а не контракт и не баланс. Теперь проверяются оба слоя.
+
 21.11.2026: правила сверены с `docs/INVOICE-USDC.md` и страницей оффера автоматическим тестом
 (`backend/tests/test_refund_runbook.py`) — срок «5 рабочих дней», «100 %» и «после запуска конверта
 без возврата» должны совпадать во всех трёх местах.
