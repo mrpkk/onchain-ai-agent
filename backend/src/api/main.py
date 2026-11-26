@@ -674,6 +674,40 @@ async def revoke_api_key(
 
 # ── Ricardian 2-of-3 (S6-03) ─────────────────────────────────────────
 
+def _escrow_policy_gate(action: str, params: dict) -> None:
+    """Первый рубеж: политика Дхармы проверяется ДО отправки транзакции в сеть.
+
+    26.11.2026: у агента гейт был (`OnChainAgent._policy_gate`), а у эскроу-эндпоинтов API — нет:
+    `deny`-правило не мешало создать или освободить эскроу. Политика берётся из окружения
+    (`KARTA_ESCROW_POLICY_JSON`) или дефолтная; отказ — 403 с кодами правил, а не молчаливая отправка.
+    """
+    import os
+
+    from src.security.dharma import build_default_policy, compile_policy
+    from src.security.dharma import evaluate as dharma_evaluate
+    from src.security.dharma.evaluator import TxContext
+
+    raw = os.getenv("KARTA_ESCROW_POLICY_JSON", "").strip()
+    policy = compile_policy(json.loads(raw)) if raw else build_default_policy()
+    # Цепь берём из интеграции эскроу: политика проверяет `allow.chains`, и None превращался
+    # в отказ по цепи даже для разрешённого адреса (26.11.2026).
+    try:
+        from src.integrations.escrow import ALLOWED_CHAINS as _chains
+        chain_id = sorted(_chains)[0] if _chains else None
+    except Exception:  # noqa: BLE001 — без интеграции цепь неизвестна
+        chain_id = None
+    verdict = dharma_evaluate(policy, TxContext(
+        action=action, params=params or {}, chain_id=chain_id, gas_price_gwei=0.0,
+        spent_today_eth=0.0, recent_tx=[], revert_streak=0, risk_score=0.5,
+        new_spender=False))
+    if str(getattr(verdict, "decision", "")).lower().endswith("deny"):
+        raise HTTPException(status_code=403, detail={
+            "code": "POLICY_DENY", "action": action,
+            "rules": list(getattr(verdict, "rule_ids", []) or []),
+            "reason": getattr(verdict, "reason", "") or "policy denied the action",
+        })
+
+
 def _chain_http_error(exc) -> HTTPException:  # RicardianError | AgentRegistryError
     status_map = {
         "NOT_FOUND": 404,
@@ -986,6 +1020,10 @@ async def escrow_create(
         raise HTTPException(status_code=422, detail="amount_wei должен быть целым (wei)") from None
     if amount <= 0:
         raise HTTPException(status_code=422, detail="amount_wei должен быть > 0")
+    # Ключи `to`/`address` — те, что читает политика (`ctx.addresses()`); `payee` она не видит.
+    _escrow_policy_gate("escrow_create", {"to": payee, "address": payee,
+                                          "amount_wei": str(amount),
+                                          "amount": amount / 1e18})
     service = EscrowService()
     try:
         return await service.create_rental(payee, amount, token_address=body.token)

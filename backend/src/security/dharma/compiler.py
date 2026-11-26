@@ -48,5 +48,9 @@ def build_default_policy(per_tx_eth: float = 1.0, daily_eth: float = 5.0) -> Com
     return compile_policy({
         "version": 1,
         "limits": {"per_tx_eth": per_tx_eth, "daily_eth": daily_eth},
+        # 26.11.2026: эскроу — штатное действие продукта, и API-гейт проверяет политику
+        # по имени действия. Без allow-списка дефолт запрещал создание эскроу целиком.
+        "allow": {"actions": ["transfer", "contract_call", "approve", "hold", "swap",
+                              "escrow_create", "escrow_release", "escrow_refund"]},
         "deny": {"actions": ["deploy"]},
     })
